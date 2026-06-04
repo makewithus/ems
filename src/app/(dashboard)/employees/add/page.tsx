@@ -8,7 +8,8 @@ import {
   ArrowLeft, Loader2, User, Briefcase, KeyRound, Check,
   Eye, EyeOff, Copy, CheckCheck, X,
 } from "lucide-react";
-import { DEPARTMENTS, EMPLOYMENT_TYPES } from "@/lib/utils";
+import { EMPLOYMENT_TYPES } from "@/lib/utils";
+import { useDepartments } from "@/hooks/useDepartments";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
@@ -72,6 +73,7 @@ const RuleItem = ({ valid, label }: { valid: boolean; label: string }) => (
 export default function AddEmployeePage() {
   const router = useRouter();
   const { companyId } = useAuthStore();
+  const { departments } = useDepartments();
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
   const [savedCreds, setSavedCreds] = useState<{ employeeId: string; password: string } | null>(null);
@@ -346,7 +348,7 @@ export default function AddEmployeePage() {
               <Field label="Department *" id="department" error={errors.department?.message}>
                 <select id="department" className="input-base" {...register("department")}>
                   <option value="">Select department</option>
-                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  {departments.map((d) => <option key={d} value={d}>{d}</option>)}
                 </select>
               </Field>
               <Field label="Designation *" id="designation" error={errors.designation?.message}>

@@ -6,7 +6,8 @@ import {
   MapPin, Building2, Calendar, DollarSign, Loader2,
   Save, X, ChevronDown,
 } from "lucide-react";
-import { formatDate, getInitials, formatCurrency, DEPARTMENTS, EMPLOYMENT_TYPES } from "@/lib/utils";
+import { formatDate, getInitials, formatCurrency, EMPLOYMENT_TYPES } from "@/lib/utils";
+import { useDepartments } from "@/hooks/useDepartments";
 import { db } from "@/lib/firebase";
 import {
   doc, getDoc, updateDoc, serverTimestamp,
@@ -39,6 +40,7 @@ const TABS = ["Overview", "Attendance", "Leaves", "Payroll", "Documents", "Tasks
 function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; onSaved: (updated: Emp) => void }) {
   const [form, setForm] = useState<Emp>({ ...emp });
   const [saving, setSaving] = useState(false);
+  const { departments } = useDepartments();
 
   const set = (k: keyof Emp, v: string | number) =>
     setForm((p) => ({ ...p, [k]: v }));
@@ -132,7 +134,7 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
           <Field label="Email"            field="email" type="email" />
           <Field label="Phone"            field="phone" />
           <Field label="Designation"      field="designation" />
-          <Field label="Department"       field="department" options={[...DEPARTMENTS]} />
+          <Field label="Department"       field="department" options={departments} />
           <Field label="Employment Type"  field="employmentType" options={[...EMPLOYMENT_TYPES]} />
           <Field label="Salary (₹)"       field="salary" type="number" />
           <Field label="Date of Birth"    field="dob" type="date" />
