@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc,
-  onSnapshot, query, orderBy, serverTimestamp, writeBatch
+  onSnapshot, query, orderBy, serverTimestamp
 } from "firebase/firestore";
 import { useAuthStore } from "@/store/auth.store";
 
@@ -27,15 +27,6 @@ const FOLDERS = [
   { id: "9", name: "HR Files",            icon: "🗂️" },
 ];
 
-const INIT_FILES = [
-  { id: "1", name: "Arjun_Offer_Letter.pdf",   type: "pdf",  size: 245000,  uploader: "HR Admin",    date: "2025-05-20", dept: "Engineering", tags: ["offer","onboarding"], pinned: true,  favorite: false, folderId: "2" },
-  { id: "2", name: "Q1_Payroll_Report.xlsx",   type: "xlsx", size: 512000,  uploader: "Finance",     date: "2025-05-15", dept: "Finance",     tags: ["payroll","q1"],       pinned: true,  favorite: true,  folderId: "3" },
-  { id: "3", name: "Employee_Policy_2025.pdf", type: "pdf",  size: 1200000, uploader: "HR Admin",    date: "2025-05-10", dept: "All",         tags: ["policy"],             pinned: false, favorite: false, folderId: "7" },
-  { id: "4", name: "Priya_ID_Proof.jpg",       type: "jpg",  size: 890000,  uploader: "HR Admin",    date: "2025-05-08", dept: "HR",          tags: ["id","kyc"],           pinned: false, favorite: false, folderId: "6" },
-  { id: "5", name: "Training_Module_1.pdf",    type: "pdf",  size: 3400000, uploader: "Operations",  date: "2025-04-30", dept: "All",         tags: ["training"],           pinned: false, favorite: true,  folderId: "8" },
-  { id: "6", name: "NDA_Contract.docx",        type: "docx", size: 128000,  uploader: "Legal",       date: "2025-04-22", dept: "Management",  tags: ["legal","nda"],        pinned: false, favorite: false, folderId: "5" },
-];
-
 const FILE_ICON: Record<string, React.ReactNode> = {
   pdf:  <FileText size={18} color="var(--text-primary)" />,
   xlsx: <FileText size={18} color="var(--text-primary)" />,
@@ -44,8 +35,6 @@ const FILE_ICON: Record<string, React.ReactNode> = {
   png:  <Image    size={18} color="var(--text-primary)" aria-label="Image file" />,
 };
 const fileIcon = (t: string) => FILE_ICON[t] ?? <File size={18} color="var(--text-primary)" />;
-
-let isSeeding = false;
 
 type DocFile = {
   id: string;
@@ -378,59 +367,30 @@ export default function DocumentsPage() {
 
   const { user } = useAuthStore();
 
-  /* ─── Fetch & Seed Documents ─── */
+  /* ─── Fetch Documents from Firestore (no auto-seeding) ─── */
   useEffect(() => {
     const q = query(collection(db, "documents"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(
       q,
-      async (snap) => {
-        if (snap.empty && !isSeeding) {
-          isSeeding = true;
-          setLoading(true);
-          try {
-            const batch = writeBatch(db);
-            INIT_FILES.forEach((f) => {
-              const docRef = doc(collection(db, "documents"));
-              batch.set(docRef, {
-                name: f.name,
-                type: f.type,
-                size: f.size,
-                uploader: f.uploader,
-                date: f.date,
-                dept: f.dept,
-                tags: f.tags,
-                pinned: f.pinned,
-                favorite: f.favorite,
-                folderId: f.folderId,
-                createdAt: serverTimestamp(),
-              });
-            });
-            await batch.commit();
-          } catch (e) {
-            console.error("Seeding documents failed", e);
-          } finally {
-            setLoading(false);
-          }
-        } else {
-          const rows: DocFile[] = snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              name: data.name ?? "",
-              type: data.type ?? "pdf",
-              size: data.size ?? 0,
-              uploader: data.uploader ?? "System",
-              date: data.date ?? "",
-              dept: data.dept ?? "All",
-              tags: data.tags ?? [],
-              pinned: !!data.pinned,
-              favorite: !!data.favorite,
-              folderId: data.folderId ?? "",
-            };
-          });
-          setFiles(rows);
-          setLoading(false);
-        }
+      (snap) => {
+        const rows: DocFile[] = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            name:     data.name     ?? "",
+            type:     data.type     ?? "pdf",
+            size:     data.size     ?? 0,
+            uploader: data.uploader ?? "System",
+            date:     data.date     ?? "",
+            dept:     data.dept     ?? "All",
+            tags:     data.tags     ?? [],
+            pinned:   !!data.pinned,
+            favorite: !!data.favorite,
+            folderId: data.folderId ?? "",
+          };
+        });
+        setFiles(rows);
+        setLoading(false);
       },
       (err) => {
         console.error(err);

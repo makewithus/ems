@@ -20,6 +20,7 @@ export interface UserProfile {
   role: Role;
   companyId: string;
   employeeId?: string;
+  department?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   isActive: boolean;

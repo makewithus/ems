@@ -1,9 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Bell, LogOut, User, Menu, ChevronDown } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { getInitials } from "@/lib/utils";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 
 interface TopbarProps { onMenuToggle: () => void; }
 
@@ -11,6 +13,20 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
   const router = useRouter();
   const { profile, signOut } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!profile?.uid) return;
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", profile.uid),
+      where("isRead", "==", false)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setUnreadCount(snap.size);
+    });
+    return () => unsub();
+  }, [profile?.uid]);
 
   const handleSignOut = () => {
     signOut();
@@ -77,18 +93,20 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
         title="Notifications"
       >
         <Bell size={18} />
-        <span
-          style={{
-            position: "absolute",
-            top: 4,
-            right: 4,
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: "var(--accent-red)",
-            border: "2px solid var(--bg-secondary)",
-          }}
-        />
+        {unreadCount > 0 && (
+          <span
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              background: "var(--accent-red)",
+              border: "2px solid var(--bg-secondary)",
+            }}
+          />
+        )}
       </button>
 
       {/* Profile menu */}

@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import {
-  collection, query, where, onSnapshot, orderBy,
-  doc, setDoc, serverTimestamp,
+  collection, query, where, onSnapshot,
+  doc, setDoc, getDoc, serverTimestamp,
 } from "firebase/firestore";
 
 export type AttendanceRecord = {
@@ -14,6 +14,8 @@ export type AttendanceRecord = {
   date: string; // YYYY-MM-DD
   clockIn: string; // HH:MM or ""
   clockOut: string; // HH:MM or ""
+  breakStart: string; // HH:MM or ""
+  breakEnd: string; // HH:MM or ""
   status: "Present" | "Absent" | "Late" | "Half Day" | "Holiday" | "Weekend";
   hoursWorked: string;
 };
@@ -25,10 +27,10 @@ export function useAttendanceByDate(date: string) {
 
   useEffect(() => {
     if (!date) return;
+    // No orderBy here — avoids composite index requirement; we sort in-memory
     const q = query(
       collection(db, "attendance"),
-      where("date", "==", date),
-      orderBy("employeeName", "asc")
+      where("date", "==", date)
     );
     const unsub = onSnapshot(
       q,
@@ -43,14 +45,19 @@ export function useAttendanceByDate(date: string) {
             date: data.date ?? date,
             clockIn: data.clockIn ?? "",
             clockOut: data.clockOut ?? "",
+            breakStart: data.breakStart ?? "",
+            breakEnd: data.breakEnd ?? "",
             status: data.status ?? "Absent",
             hoursWorked: data.hoursWorked ?? "—",
           };
         });
+        // Sort by employee name in-memory
+        rows.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
         setRecords(rows);
         setLoading(false);
       },
-      () => {
+      (err) => {
+        console.error("Attendance fetch error:", err);
         setRecords([]);
         setLoading(false);
       }
@@ -68,10 +75,10 @@ export function useEmployeeAttendance(employeeId: string) {
 
   useEffect(() => {
     if (!employeeId) return;
+    // No orderBy to avoid composite index requirement; sort in-memory
     const q = query(
       collection(db, "attendance"),
-      where("employeeId", "==", employeeId),
-      orderBy("date", "desc")
+      where("employeeId", "==", employeeId)
     );
     const unsub = onSnapshot(
       q,
@@ -86,14 +93,19 @@ export function useEmployeeAttendance(employeeId: string) {
             date: data.date ?? "",
             clockIn: data.clockIn ?? "",
             clockOut: data.clockOut ?? "",
+            breakStart: data.breakStart ?? "",
+            breakEnd: data.breakEnd ?? "",
             status: data.status ?? "Absent",
             hoursWorked: data.hoursWorked ?? "—",
           };
         });
+        // Sort by date descending in-memory
+        rows.sort((a, b) => b.date.localeCompare(a.date));
         setRecords(rows);
         setLoading(false);
       },
-      () => {
+      (err) => {
+        console.error("Employee attendance fetch error:", err);
         setRecords([]);
         setLoading(false);
       }
@@ -104,11 +116,14 @@ export function useEmployeeAttendance(employeeId: string) {
   return { records, loading };
 }
 
-/** Write a clock-in or clock-out record to Firestore */
+/** Write a clock-in record to Firestore.
+ *  Resolves department from user/employee profile if not provided directly.
+ */
 export async function recordClockIn(
   employeeId: string,
   employeeName: string,
-  department: string
+  department: string,
+  uid?: string
 ) {
   const now = new Date();
   const dateStr = now.toISOString().split("T")[0];
@@ -119,15 +134,35 @@ export async function recordClockIn(
   const currentMins = now.getHours() * 60 + now.getMinutes();
   const status: AttendanceRecord["status"] = currentMins <= workStart + 15 ? "Present" : "Late";
 
+  // Resolve department from Firestore if not provided
+  let resolvedDept = department;
+  if (!resolvedDept && uid) {
+    try {
+      const userSnap = await getDoc(doc(db, "users", uid));
+      if (userSnap.exists()) {
+        resolvedDept = userSnap.data().department ?? "";
+      }
+      // Also try employees collection for department
+      if (!resolvedDept) {
+        const { collection: col, query: q, where: w, getDocs } = await import("firebase/firestore");
+        const empSnap = await getDocs(q(col(db, "employees"), w("uid", "==", uid)));
+        if (!empSnap.empty) resolvedDept = empSnap.docs[0].data().department ?? "";
+      }
+    } catch {
+      // ignore — department will be empty
+    }
+  }
+
   await setDoc(
     doc(db, "attendance", docId),
     {
       employeeId,
       employeeName,
-      department,
+      department: resolvedDept,
       date: dateStr,
       clockIn: timeStr,
       status,
+      uid: uid ?? "",
       updatedAt: serverTimestamp(),
     },
     { merge: true }
@@ -160,6 +195,43 @@ export async function recordClockOut(
     {
       clockOut: timeStr,
       hoursWorked,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return timeStr;
+}
+
+/** Record break start for an employee */
+export async function recordBreakStart(employeeId: string) {
+  const now = new Date();
+  const dateStr = now.toISOString().split("T")[0];
+  const timeStr = now.toTimeString().slice(0, 5);
+  const docId = `${employeeId}_${dateStr}`;
+
+  await setDoc(
+    doc(db, "attendance", docId),
+    {
+      breakStart: timeStr,
+      breakEnd: "", // clear any previous break end
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return timeStr;
+}
+
+/** Record break end for an employee */
+export async function recordBreakEnd(employeeId: string) {
+  const now = new Date();
+  const dateStr = now.toISOString().split("T")[0];
+  const timeStr = now.toTimeString().slice(0, 5);
+  const docId = `${employeeId}_${dateStr}`;
+
+  await setDoc(
+    doc(db, "attendance", docId),
+    {
+      breakEnd: timeStr,
       updatedAt: serverTimestamp(),
     },
     { merge: true }

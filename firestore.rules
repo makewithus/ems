@@ -57,7 +57,7 @@ service cloud.firestore {
     match /employees/{employeeId} {
       allow read:   if isHRAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow create: if isHRAdmin() || isSignedIn(); // admin creates on behalf
-      allow update: if isHRAdmin();
+      allow update: if isHRAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
       allow delete: if isSuperAdmin();
     }
 
@@ -140,20 +140,28 @@ service cloud.firestore {
 
     // ── /tasks ───────────────────────────────────────────────────────────
     match /tasks/{taskId} {
+      // Employee can read if EITHER assignedTo OR assigneeId matches their UID
+      // (assignedTo is the canonical field; assigneeId is the legacy/alternate field)
       allow read:
         if isHRAdmin()
-        || (isSignedIn() && resource.data.assignedTo == request.auth.uid);
+        || (isSignedIn() && (
+              resource.data.assignedTo == request.auth.uid
+              || resource.data.assigneeId == request.auth.uid
+           ));
       allow create: if isHRAdmin();
       allow update:
         if isHRAdmin()
-        || (isSignedIn() && resource.data.assignedTo == request.auth.uid);
+        || (isSignedIn() && (
+              resource.data.assignedTo == request.auth.uid
+              || resource.data.assigneeId == request.auth.uid
+           ));
     }
 
     // ── /notices ─────────────────────────────────────────────────────────
     match /notices/{noticeId} {
       allow read:  if isSignedIn();
       allow create, delete: if isHRAdmin();
-      allow update: if isHRAdmin() || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+      allow update: if isHRAdmin() || (isSignedIn() && request.resource.data.title == resource.data.title && request.resource.data.description == resource.data.description);
     }
 
     // ── /notifications ───────────────────────────────────────────────────

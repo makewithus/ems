@@ -20,7 +20,7 @@ export function middleware(request: NextRequest) {
 
   // Strict Portal Isolation — role-based route protection
   const roleCookie = request.cookies.get("ems-role")?.value;
-  const ADMIN_PATHS = ["/employees", "/settings", "/reports"];
+  const ADMIN_PATHS = ["/employees", "/reports"];
   
   if (roleCookie === "employee" && ADMIN_PATHS.some((p) => pathname.startsWith(p))) {
     // Redirect employees trying to access admin paths back to dashboard

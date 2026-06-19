@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  doc, updateDoc, serverTimestamp, where,
+  doc, updateDoc, serverTimestamp, where, getDocs
 } from "firebase/firestore";
 
 /* ─── Types ─────────────────────────────────────────────────── */
@@ -36,10 +36,10 @@ const PRIORITY_BG: Record<string, string> = {
   High: "var(--accent-amber-dim)", Critical: "var(--accent-red-dim)",
 };
 const COLUMNS: { status: string; color: string }[] = [
-  { status: "Pending",     color: "var(--text-muted)" },
+  { status: "Pending", color: "var(--text-muted)" },
   { status: "In Progress", color: "var(--accent-blue)" },
-  { status: "Review",      color: "var(--accent-amber)" },
-  { status: "Completed",   color: "var(--accent-green)" },
+  { status: "Review", color: "var(--accent-amber)" },
+  { status: "Completed", color: "var(--accent-green)" },
 ];
 
 const PROGRESS_MAP: Record<string, number> = {
@@ -51,12 +51,12 @@ export default function TasksPage() {
   const { role, user, profile } = useAuthStore();
   const isAdmin = role === "super_admin" || role === "hr_admin";
 
-  const [tasks,    setTasks]    = useState<Task[]>([]);
-  const [loading,  setLoading]  = useState(true);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [employees, setEmployees] = useState<EmpOption[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
-  const [saving,   setSaving]   = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [newTask, setNewTask] = useState({
     title: "", desc: "", deadline: "", priority: "Medium",
@@ -64,72 +64,116 @@ export default function TasksPage() {
   });
 
   /* ── Drag state ── */
-  const dragId     = useRef<string | null>(null);
+  const dragId = useRef<string | null>(null);
   const dragTarget = useRef<string | null>(null);
-  const [draggingId,  setDraggingId]  = useState<string | null>(null);
-  const [overColumn,  setOverColumn]  = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overColumn, setOverColumn] = useState<string | null>(null);
 
   /* ── Load employees for the picker (admins only) ── */
+  /* We load from the `users` collection because the Firestore doc ID equals
+     the Firebase Auth UID — this is what we store in `assigneeId` and what
+     the employee's own query uses via user.uid. */
   useEffect(() => {
     if (!isAdmin) return;
-    const q = query(collection(db, "employees"), orderBy("firstName", "asc"));
-    const unsub = onSnapshot(q, (snap) => {
-      setEmployees(
-        snap.docs
-          .filter((d) => d.data().status === "Active")
+    // No orderBy to avoid composite index requirement; sort in-memory
+    const q = query(
+      collection(db, "users"),
+      where("role", "==", "employee")
+    );
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const empList = snap.docs
           .map((d) => ({
-            uid:        d.data().uid        ?? d.id,
-            name:       `${d.data().firstName ?? ""} ${d.data().lastName ?? ""}`.trim(),
+            uid: d.id,                          // doc ID == Auth UID
+            name: d.data().displayName ?? d.data().email ?? d.id,
             employeeId: d.data().employeeId ?? d.id,
           }))
-      );
-    });
+          .filter((e) => e.name) // skip blank entries
+          .sort((a, b) => a.name.localeCompare(b.name)); // sort in-memory
+        setEmployees(empList);
+      },
+      (err) => {
+        console.error("Failed to fetch employees for task picker:", err);
+      }
+    );
     return () => unsub();
   }, [isAdmin]);
 
   /* ── Real-time tasks listener ── */
   useEffect(() => {
-    if (!user) return;
+    // Wait for both user AND role to be resolved (auth state might be async)
+    if (!user?.uid || !role) return;
 
-    let q;
+    let unsub: (() => void) | undefined;
+    let unsub2: (() => void) | undefined;
+    const taskMap = new Map<string, Task>();
+
+    const mergeAndSet = () => {
+      const taskList = Array.from(taskMap.values());
+      if (!isAdmin) {
+        taskList.sort((a, b) => {
+          const aTime = (a.createdAt as { toDate?: () => Date })?.toDate?.()?.getTime() || 0;
+          const bTime = (b.createdAt as { toDate?: () => Date })?.toDate?.()?.getTime() || 0;
+          return bTime - aTime;
+        });
+      }
+      setTasks(taskList);
+      setLoading(false);
+    };
+
+    const mapDoc = (d: import("firebase/firestore").QueryDocumentSnapshot) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        title: data.title ?? "",
+        desc: data.desc ?? "",
+        deadline: data.deadline ?? "",
+        priority: data.priority ?? "Medium",
+        status: data.status ?? "Pending",
+        assigneeId: data.assigneeId ?? "",
+        assigneeName: data.assigneeName ?? "",
+        progress: data.progress ?? 0,
+        createdAt: data.createdAt,
+      } as Task;
+    };
+
     if (isAdmin) {
       // Admins see all tasks, newest first
-      q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+      const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+      unsub = onSnapshot(
+        q,
+        (snap) => {
+          snap.docs.forEach((d) => taskMap.set(d.id, mapDoc(d)));
+          mergeAndSet();
+        },
+        (err) => { console.error("Tasks listener error:", err); setLoading(false); }
+      );
     } else {
-      // Employees only see their own tasks
-      q = query(
-        collection(db, "tasks"),
-        where("assigneeId", "==", user.uid),
-        orderBy("createdAt", "desc")
+      // Employees: query by assigneeId (Firebase Auth UID stored in users doc)
+      // AND by assignedTo (alternate field) — handles any legacy data inconsistencies
+      const q1 = query(collection(db, "tasks"), where("assigneeId", "==", user.uid));
+      const q2 = query(collection(db, "tasks"), where("assignedTo", "==", user.uid));
+
+      // Both listeners write into the same Map — deduplication is automatic.
+      // Each listener independently triggers a re-render on updates.
+      unsub = onSnapshot(
+        q1,
+        (snap) => { snap.docs.forEach((d) => taskMap.set(d.id, mapDoc(d))); mergeAndSet(); },
+        (err) => { console.error("Tasks (assigneeId) error:", err); setLoading(false); }
+      );
+      unsub2 = onSnapshot(
+        q2,
+        (snap) => { snap.docs.forEach((d) => taskMap.set(d.id, mapDoc(d))); mergeAndSet(); },
+        (err) => { console.error("Tasks (assignedTo) error:", err); setLoading(false); }
       );
     }
 
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setTasks(
-          snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id:           d.id,
-              title:        data.title        ?? "",
-              desc:         data.desc         ?? "",
-              deadline:     data.deadline     ?? "",
-              priority:     data.priority     ?? "Medium",
-              status:       data.status       ?? "Pending",
-              assigneeId:   data.assigneeId   ?? "",
-              assigneeName: data.assigneeName ?? "",
-              progress:     data.progress     ?? 0,
-              createdAt:    data.createdAt,
-            };
-          })
-        );
-        setLoading(false);
-      },
-      () => setLoading(false)
-    );
-    return () => unsub();
-  }, [user, isAdmin]);
+    return () => {
+      unsub?.();
+      unsub2?.();
+    };
+  }, [user?.uid, role, isAdmin]);
 
   /* ── Move task (updates Firestore) ── */
   const moveTask = useCallback(async (id: string, newStatus: string) => {
@@ -137,36 +181,81 @@ export default function TasksPage() {
     if (!task || task.status === newStatus) return;
     try {
       await updateDoc(doc(db, "tasks", id), {
-        status:    newStatus,
-        progress:  PROGRESS_MAP[newStatus] ?? task.progress,
+        status: newStatus,
+        progress: PROGRESS_MAP[newStatus] ?? task.progress,
         updatedAt: serverTimestamp(),
       });
       toast.success(`Moved to "${newStatus}"`);
     } catch {
       toast.error("Failed to update task");
+      return; // stop here — don't attempt notifications
     }
-  }, [tasks]);
+
+    // Notify admins if an employee updated the task.
+    // This is fire-and-forget — errors here must NEVER surface as "Failed to update task".
+    if (!isAdmin) {
+      try {
+        const companyId = profile?.companyId || "default";
+        const adminsSnap = await getDocs(
+          query(collection(db, "users"), where("role", "in", ["super_admin", "hr_admin"]))
+        );
+        const notifPromises = adminsSnap.docs
+          .filter((d) => d.data().companyId === companyId)
+          .map((adminDoc) =>
+            addDoc(collection(db, "notifications"), {
+              companyId,
+              userId: adminDoc.id,
+              title: "Task Status Updated",
+              message: `${profile?.displayName ?? "Employee"} marked "${task.title}" as "${newStatus}"`,
+              type: "task",
+              isRead: false,
+              link: "/tasks",
+              createdAt: serverTimestamp(),
+            })
+          );
+        await Promise.allSettled(notifPromises); // allSettled = never throws
+      } catch {
+        // Notification failure is silent — the task update already succeeded
+      }
+    }
+  }, [tasks, isAdmin, profile]);
 
   /* ── Create task ── */
   const addTask = async () => {
-    if (!newTask.title.trim())        { toast.error("Task title is required"); return; }
-    if (!newTask.assigneeId)          { toast.error("Please select an assignee"); return; }
-    if (!newTask.deadline)            { toast.error("Please set a deadline"); return; }
+    if (!newTask.title.trim()) { toast.error("Task title is required"); return; }
+    if (!newTask.assigneeId) { toast.error("Please select an assignee"); return; }
+    if (!newTask.deadline) { toast.error("Please set a deadline"); return; }
     setSaving(true);
     try {
+      const companyId = profile?.companyId || "default";
       await addDoc(collection(db, "tasks"), {
-        title:        newTask.title.trim(),
-        desc:         newTask.desc.trim(),
-        deadline:     newTask.deadline,
-        priority:     newTask.priority,
-        status:       "Pending",
-        progress:     0,
-        assigneeId:   newTask.assigneeId,
+        companyId,
+        title: newTask.title.trim(),
+        desc: newTask.desc.trim(),
+        deadline: newTask.deadline,
+        priority: newTask.priority,
+        status: "Pending",
+        progress: 0,
+        assigneeId: newTask.assigneeId,
         assigneeName: newTask.assigneeName,
-        createdBy:    profile?.displayName ?? "Admin",
-        createdAt:    serverTimestamp(),
-        updatedAt:    serverTimestamp(),
+        assignedTo: newTask.assigneeId, // Added for security rules check
+        createdBy: profile?.displayName ?? "Admin",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
+
+      // Dispatch notification to employee
+      await addDoc(collection(db, "notifications"), {
+        companyId,
+        userId: newTask.assigneeId,
+        title: "New Task Assigned",
+        message: `Admin assigned a new task: "${newTask.title.trim()}"`,
+        type: "task",
+        isRead: false,
+        link: "/tasks",
+        createdAt: serverTimestamp(),
+      });
+
       toast.success(`Task assigned to ${newTask.assigneeName}!`);
       setNewTask({ title: "", desc: "", deadline: "", priority: "Medium", assigneeId: "", assigneeName: "" });
       setShowForm(false);
@@ -189,7 +278,7 @@ export default function TasksPage() {
     if (dragId.current && dragTarget.current) {
       moveTask(dragId.current, dragTarget.current);
     }
-    dragId.current    = null;
+    dragId.current = null;
     dragTarget.current = null;
     setDraggingId(null);
     setOverColumn(null);
@@ -206,7 +295,7 @@ export default function TasksPage() {
     e.preventDefault();
     const id = dragId.current ?? e.dataTransfer.getData("text/plain");
     if (id) moveTask(id, status);
-    dragId.current     = null;
+    dragId.current = null;
     dragTarget.current = null;
     setDraggingId(null);
     setOverColumn(null);
@@ -281,7 +370,7 @@ export default function TasksPage() {
           minHeight: 300,
         }}>
           {COLUMNS.map(({ status, color }) => {
-            const col    = tasks.filter((t) => t.status === status);
+            const col = tasks.filter((t) => t.status === status);
             const isOver = overColumn === status;
             return (
               <div
@@ -320,13 +409,13 @@ export default function TasksPage() {
                   {col.map((t) => (
                     <div
                       key={t.id}
-                      draggable={isAdmin}
-                      onDragStart={isAdmin ? (e) => onDragStart(e, t.id) : undefined}
-                      onDragEnd={isAdmin ? onDragEnd : undefined}
+                      draggable
+                      onDragStart={(e) => onDragStart(e, t.id)}
+                      onDragEnd={onDragEnd}
                       className="card"
                       style={{
                         padding: "14px 16px",
-                        cursor: isAdmin ? "grab" : "default",
+                        cursor: "grab",
                         opacity: draggingId === t.id ? 0.35 : 1,
                         transition: "opacity 0.15s, box-shadow 0.15s",
                         boxShadow: draggingId === t.id ? "none" : "0 1px 4px rgba(0,0,0,0.06)",
@@ -334,7 +423,7 @@ export default function TasksPage() {
                         borderLeft: `3px solid ${PRIORITY_COLOR[t.priority] ?? "var(--border)"}`,
                       }}
                     >
-                      {/* Priority + grip */}
+                      {/* Priority + grip icon (always shown as drag handle for all users) */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                         <span
                           className="badge"
@@ -342,7 +431,7 @@ export default function TasksPage() {
                         >
                           {t.priority}
                         </span>
-                        {isAdmin && <GripVertical size={13} color="var(--text-muted)" />}
+                        <GripVertical size={13} color="var(--text-muted)" />
                       </div>
 
                       {/* Title + description */}
@@ -357,14 +446,14 @@ export default function TasksPage() {
                       </div>
 
                       {/* Assignee + deadline */}
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginBottom: t.status !== "Completed" ? 10 : 0 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginBottom: 0 }}>
                         <span>👤 {t.assigneeName.split(" ")[0]}</span>
                         {t.deadline && <span>📅 {formatDate(t.deadline)}</span>}
                       </div>
 
-                      {/* Status selector — employees can update their own tasks; admins can update any */}
-                      {t.status !== "Completed" && (isAdmin || t.assigneeId === user?.uid) && (
-                        <div style={{ position: "relative" }}>
+                      {/* Admin-only dropdown status changer (employees use drag) */}
+                      {isAdmin && t.status !== "Completed" && (
+                        <div style={{ position: "relative", marginTop: 10 }}>
                           <select
                             className="input-base"
                             style={{ fontSize: 11, padding: "5px 28px 5px 8px", appearance: "none" }}
@@ -386,7 +475,7 @@ export default function TasksPage() {
                       color: "var(--text-muted)", border: "1px dashed var(--border)",
                       borderRadius: "var(--radius-sm)",
                     }}>
-                      {isAdmin ? "Drag tasks here" : "No tasks"}
+                      Drag tasks here
                     </div>
                   )}
                 </div>
@@ -520,7 +609,7 @@ export default function TasksPage() {
                       const emp = employees.find((em) => em.uid === e.target.value);
                       setNewTask((p) => ({
                         ...p,
-                        assigneeId:   e.target.value,
+                        assigneeId: e.target.value,
                         assigneeName: emp?.name ?? "",
                       }));
                     }}

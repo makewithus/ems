@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { Clock, Play, Square, Coffee, ChevronDown, Loader2, CalendarDays } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Clock, Play, Square, Coffee, ChevronDown, Loader2, CalendarDays, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { useAttendanceStore } from "@/store/attendance.store";
@@ -11,6 +11,8 @@ import {
   useEmployeeAttendance,
   recordClockIn,
   recordClockOut,
+  recordBreakStart,
+  recordBreakEnd,
 } from "@/hooks/useAttendance";
 import AttendanceCalendarModal from "@/components/attendance/AttendanceCalendarModal";
 
@@ -22,51 +24,72 @@ const statusBadge: Record<string, { bg: string; color: string }> = {
   Holiday:    { bg: "var(--accent-blue-dim)",   color: "var(--accent-blue)" },
 };
 
+function fmt24to12(t: string): string {
+  if (!t) return "—";
+  const [h, m] = t.split(":").map(Number);
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
+}
+
 export default function AttendancePage() {
-  const { role, profile } = useAuthStore();
+  const { role, profile, user } = useAuthStore();
   const isAdmin = role === "super_admin" || role === "hr_admin";
-  const { clockInTime, clockOutTime, clockIn, clockOut, continueWork } = useAttendanceStore();
+  const { clockIn, clockOut, continueWork } = useAttendanceStore();
+
   const [dept, setDept] = useState("All");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [showCalendar, setShowCalendar] = useState(false);
   const [clocking, setClocking] = useState(false);
+  const [breaking, setBreaking] = useState(false);
+  const [quickGlance, setQuickGlance] = useState<{ employeeId: string; employeeName: string } | null>(null);
   const { departments } = useDepartments();
   const today = formatDate(new Date().toISOString());
+  const todayStr = new Date().toISOString().split("T")[0];
 
-  // Admin: real-time attendance for selected date
   const { records: adminRecords, loading: adminLoading } = useAttendanceByDate(
     isAdmin ? selectedDate : ""
   );
 
-  // Employee: their own full attendance history
   const employeeId = profile?.employeeId ?? "";
   const { records: empRecords, loading: empLoading } = useEmployeeAttendance(
     !isAdmin ? employeeId : ""
   );
 
+  const todayRecord = useMemo(
+    () => empRecords.find((r) => r.date === todayStr) ?? null,
+    [empRecords, todayStr]
+  );
+
+  const hasClockedIn  = !!todayRecord?.clockIn;
+  const hasClockedOut = !!todayRecord?.clockOut;
+  const hasBreakStart = !!todayRecord?.breakStart;
+  const hasBreakEnd   = !!todayRecord?.breakEnd;
+  const isOnBreak     = hasBreakStart && !hasBreakEnd;
+
   const filteredAdmin = adminRecords.filter(
     (r) => dept === "All" || r.department === dept
   );
 
-  // Admin summary stats
   const stats = {
-    Present:  filteredAdmin.filter((r) => r.status === "Present" || r.status === "Late").length,
-    Absent:   filteredAdmin.filter((r) => r.status === "Absent").length,
-    Late:     filteredAdmin.filter((r) => r.status === "Late").length,
+    Present:    filteredAdmin.filter((r) => r.status === "Present" || r.status === "Late").length,
+    Absent:     filteredAdmin.filter((r) => r.status === "Absent").length,
+    Late:       filteredAdmin.filter((r) => r.status === "Late").length,
     "Half Day": filteredAdmin.filter((r) => r.status === "Half Day").length,
   };
 
   const handleClockIn = async () => {
     setClocking(true);
     try {
-      clockIn();
       if (employeeId) {
         await recordClockIn(
           employeeId,
           profile?.displayName ?? "Employee",
-          ""
+          profile?.department ?? "",
+          user?.uid
         );
       }
+      clockIn();
       toast.success("Clocked in successfully!");
     } catch {
       toast.error("Clock-in failed. Try again.");
@@ -78,15 +101,43 @@ export default function AttendancePage() {
   const handleClockOut = async () => {
     setClocking(true);
     try {
-      clockOut();
       if (employeeId) {
-        await recordClockOut(employeeId, clockInTime ?? "");
+        await recordClockOut(employeeId, todayRecord?.clockIn ?? "");
       }
+      clockOut();
       toast.success("Clocked out successfully!");
     } catch {
       toast.error("Clock-out failed. Try again.");
     } finally {
       setClocking(false);
+    }
+  };
+
+  const handleBreakStart = async () => {
+    if (!hasClockedIn || hasClockedOut) {
+      toast.error("You must be clocked in to start a break.");
+      return;
+    }
+    setBreaking(true);
+    try {
+      if (employeeId) await recordBreakStart(employeeId);
+      toast.success("Break started!");
+    } catch {
+      toast.error("Failed to start break.");
+    } finally {
+      setBreaking(false);
+    }
+  };
+
+  const handleBreakEnd = async () => {
+    setBreaking(true);
+    try {
+      if (employeeId) await recordBreakEnd(employeeId);
+      toast.success("Break ended — back to work!");
+    } catch {
+      toast.error("Failed to end break.");
+    } finally {
+      setBreaking(false);
     }
   };
 
@@ -100,18 +151,12 @@ export default function AttendancePage() {
           </p>
         </div>
         {!isAdmin && (
-          <button
-            id="att-calendar-view"
-            className="btn btn-secondary"
-            style={{ gap: 6 }}
-            onClick={() => setShowCalendar(true)}
-          >
+          <button id="att-calendar-view" className="btn btn-secondary" style={{ gap: 6 }} onClick={() => setShowCalendar(true)}>
             <CalendarDays size={14} /> Quick View
           </button>
         )}
       </div>
 
-      {/* Employee Calendar Modal */}
       {showCalendar && !isAdmin && (
         <AttendanceCalendarModal
           employeeId={employeeId}
@@ -121,62 +166,71 @@ export default function AttendancePage() {
         />
       )}
 
+      {quickGlance && isAdmin && (
+        <AttendanceCalendarModal
+          employeeId={quickGlance.employeeId}
+          employeeName={quickGlance.employeeName}
+          fetchEmployeeId={quickGlance.employeeId}
+          onClose={() => setQuickGlance(null)}
+        />
+      )}
+
       {/* Employee Clock Widget */}
       {!isAdmin && (
-        <div className="card" style={{ padding: 24, maxWidth: 480, marginBottom: 24 }}>
+        <div className="card" style={{ padding: 24, maxWidth: 520, marginBottom: 24 }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 20 }}>Today&apos;s Attendance</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-            {[
-              { label: "Clock In",  value: clockInTime || "—", color: clockInTime ? "var(--accent-green)" : "var(--text-muted)" },
-              { label: "Clock Out", value: clockOutTime || "—", color: clockOutTime ? "var(--accent-blue)" : "var(--text-muted)" },
-            ].map((i) => (
-              <div key={i.label} style={{ padding: "14px 16px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>{i.label}</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: i.color }}>{i.value}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {!clockInTime ? (
-              <button
-                id="att-clockin"
-                onClick={handleClockIn}
-                disabled={clocking}
-                className="btn btn-primary"
-                style={{ gap: 6, gridColumn: "1/-1" }}
-              >
-                {clocking ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-                Clock In
+
+          {empLoading ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13, marginBottom: 20 }}>
+              <Loader2 size={15} className="animate-spin" /> Loading…
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+              {[
+                { label: "Clock In",    value: todayRecord?.clockIn    ? fmt24to12(todayRecord.clockIn)    : "—", color: hasClockedIn  ? "var(--accent-green)" : "var(--text-muted)" },
+                { label: "Clock Out",   value: todayRecord?.clockOut   ? fmt24to12(todayRecord.clockOut)   : "—", color: hasClockedOut ? "var(--accent-blue)"  : "var(--text-muted)" },
+                { label: "Break Start", value: todayRecord?.breakStart ? fmt24to12(todayRecord.breakStart) : "—", color: hasBreakStart ? "var(--accent-amber)" : "var(--text-muted)" },
+                { label: "Break End",   value: todayRecord?.breakEnd   ? fmt24to12(todayRecord.breakEnd)   : "—", color: hasBreakEnd   ? "var(--accent-amber)" : "var(--text-muted)" },
+              ].map((i) => (
+                <div key={i.label} style={{ padding: "14px 16px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>{i.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: i.color }}>{i.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {!hasClockedIn ? (
+              <button id="att-clockin" onClick={handleClockIn} disabled={clocking || empLoading} className="btn btn-primary" style={{ gap: 6 }}>
+                {clocking ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Clock In
               </button>
-            ) : !clockOutTime ? (
-              <button
-                id="att-clockout"
-                onClick={handleClockOut}
-                disabled={clocking}
-                className="btn btn-secondary"
-                style={{ gap: 6, gridColumn: "1/-1" }}
-              >
-                {clocking ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />}
-                Clock Out
+            ) : !hasClockedOut ? (
+              <button id="att-clockout" onClick={handleClockOut} disabled={clocking} className="btn btn-secondary" style={{ gap: 6 }}>
+                {clocking ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />} Clock Out
               </button>
             ) : (
-              <button
-                id="att-continue"
-                onClick={() => { continueWork(); toast.success("Resumed working"); }}
-                className="btn btn-primary"
-                style={{ gap: 6, gridColumn: "1/-1" }}
-              >
+              <button id="att-continue" onClick={() => { continueWork(); toast.success("Resumed working"); }} className="btn btn-primary" style={{ gap: 6 }}>
                 <Play size={14} /> Continue Work
               </button>
             )}
-            <button id="att-break-start" className="btn btn-secondary" style={{ gap: 6, gridColumn: "1/-1" }}>
-              <Coffee size={14} /> Start Break
-            </button>
+
+            {hasClockedIn && !hasClockedOut && (
+              isOnBreak ? (
+                <button id="att-break-end" className="btn btn-secondary" style={{ gap: 6 }} disabled={breaking} onClick={handleBreakEnd}>
+                  {breaking ? <Loader2 size={14} className="animate-spin" /> : <Coffee size={14} />} End Break
+                </button>
+              ) : (
+                <button id="att-break-start" className="btn btn-secondary" style={{ gap: 6 }} disabled={breaking} onClick={handleBreakStart}>
+                  {breaking ? <Loader2 size={14} className="animate-spin" /> : <Coffee size={14} />} Start Break
+                </button>
+              )
+            )}
           </div>
         </div>
       )}
 
-      {/* Employee: recent attendance list */}
+      {/* Employee: recent attendance */}
       {!isAdmin && (
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Recent Attendance</div>
@@ -185,19 +239,13 @@ export default function AttendancePage() {
               <Loader2 size={15} className="animate-spin" /> Loading…
             </div>
           ) : empRecords.length === 0 ? (
-            <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "20px 0" }}>
-              No attendance records yet.
-            </div>
+            <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "20px 0" }}>No attendance records yet.</div>
           ) : (
             <div className="table-container">
               <table>
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Clock In</th>
-                    <th>Clock Out</th>
-                    <th>Hours</th>
-                    <th>Status</th>
+                    <th>Date</th><th>Clock In</th><th>Clock Out</th><th>Break</th><th>Hours</th><th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -206,10 +254,14 @@ export default function AttendancePage() {
                       <td style={{ fontSize: 13 }}>{r.date ? formatDate(r.date) : "—"}</td>
                       <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <Clock size={12} />{r.clockIn || "—"}
+                          <Clock size={12} />{r.clockIn ? fmt24to12(r.clockIn) : "—"}
                         </div>
                       </td>
-                      <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut || "—"}</td>
+                      <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
+                      <td style={{ fontSize: 13, color: "var(--accent-amber)" }}>
+                        {r.breakStart ? fmt24to12(r.breakStart) : "—"}
+                        {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
+                      </td>
                       <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
                       <td>
                         <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
@@ -228,13 +280,12 @@ export default function AttendancePage() {
       {/* Admin: Daily table */}
       {isAdmin && (
         <>
-          {/* Summary stats */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
             {[
-              { label: "Present",   value: stats.Present,    color: "var(--accent-green)" },
-              { label: "Absent",    value: stats.Absent,     color: "var(--accent-red)" },
-              { label: "Late",      value: stats.Late,       color: "var(--accent-amber)" },
-              { label: "Half Day",  value: stats["Half Day"], color: "var(--accent-purple)" },
+              { label: "Present",  value: stats.Present,     color: "var(--accent-green)" },
+              { label: "Absent",   value: stats.Absent,      color: "var(--accent-red)" },
+              { label: "Late",     value: stats.Late,        color: "var(--accent-amber)" },
+              { label: "Half Day", value: stats["Half Day"], color: "var(--accent-purple)" },
             ].map((s) => (
               <div key={s.label} className="card" style={{ padding: "14px 18px" }}>
                 <div style={{ fontSize: 24, fontWeight: 700, color: s.color, marginBottom: 4 }}>{s.value}</div>
@@ -243,29 +294,15 @@ export default function AttendancePage() {
             ))}
           </div>
 
-          {/* Filter */}
           <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
             <div style={{ position: "relative" }}>
-              <select
-                id="att-filter-dept"
-                className="input-base"
-                style={{ paddingRight: 32, appearance: "none", minWidth: 160 }}
-                value={dept}
-                onChange={(e) => setDept(e.target.value)}
-              >
+              <select id="att-filter-dept" className="input-base" style={{ paddingRight: 32, appearance: "none", minWidth: 160 }} value={dept} onChange={(e) => setDept(e.target.value)}>
                 <option value="All">All Departments</option>
                 {departments.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
               <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
             </div>
-            <input
-              id="att-filter-date"
-              type="date"
-              className="input-base"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              style={{ width: "auto" }}
-            />
+            <input id="att-filter-date" type="date" className="input-base" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={{ width: "auto" }} />
           </div>
 
           {adminLoading ? (
@@ -277,19 +314,14 @@ export default function AttendancePage() {
             <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)" }}>
               <Clock size={36} style={{ margin: "0 auto 12px", opacity: 0.3 }} />
               <p style={{ fontSize: 14 }}>No attendance records for {formatDate(selectedDate)}</p>
-              <p style={{ fontSize: 12, marginTop: 6 }}>Records will appear here once employees clock in.</p>
+              <p style={{ fontSize: 12, marginTop: 6 }}>Records appear here once employees clock in.</p>
             </div>
           ) : (
             <div className="table-container">
               <table>
                 <thead>
                   <tr>
-                    <th>Employee</th>
-                    <th>Department</th>
-                    <th>Clock In</th>
-                    <th>Clock Out</th>
-                    <th>Hours</th>
-                    <th>Status</th>
+                    <th>Employee</th><th>Department</th><th>Clock In</th><th>Clock Out</th><th>Break</th><th>Hours</th><th>Status</th><th>Quick Glance</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -306,18 +338,27 @@ export default function AttendancePage() {
                           </div>
                         </div>
                       </td>
-                      <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{r.department}</td>
+                      <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{r.department || "—"}</td>
                       <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <Clock size={12} />{r.clockIn || "—"}
+                          <Clock size={12} />{r.clockIn ? fmt24to12(r.clockIn) : "—"}
                         </div>
                       </td>
-                      <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut || "—"}</td>
+                      <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
+                      <td style={{ fontSize: 13, color: "var(--accent-amber)" }}>
+                        {r.breakStart ? fmt24to12(r.breakStart) : "—"}
+                        {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
+                      </td>
                       <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
                       <td>
                         <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
                           {r.status}
                         </span>
+                      </td>
+                      <td>
+                        <button className="btn btn-secondary" style={{ padding: "5px 10px", fontSize: 11, gap: 4 }} onClick={() => setQuickGlance({ employeeId: r.employeeId, employeeName: r.employeeName })}>
+                          <Eye size={12} /> Glance
+                        </button>
                       </td>
                     </tr>
                   ))}

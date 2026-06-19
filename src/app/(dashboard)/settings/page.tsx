@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   Building2, Shield, CalendarDays, DollarSign, Mail, Palette,
-  X, Check, Save, User, Camera, Plus, Trash2, Tags, Loader2,
+  X, Check, Save, User, Plus, Trash2, Tags, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
@@ -234,22 +234,133 @@ function ThemeContent() {
 
 /* ─── Personal Info ─── */
 function PersonalInfoContent() {
+  const { profile, user } = useAuthStore();
+  const [phone, setPhone] = useState("");
+  const [empData, setEmpData] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loadingEmp, setLoadingEmp] = useState(true);
+
+  useEffect(() => {
+    const employeeId = profile?.employeeId;
+    if (!employeeId || !user?.uid) { setLoadingEmp(false); return; }
+    // Load from employees collection and fallback/check user doc
+    import("firebase/firestore").then(({ collection: col, query: q, where: w, getDocs, doc: fsDoc, getDoc }) => {
+      getDoc(fsDoc(db, "users", user.uid)).then((userSnap) => {
+        const userData = userSnap.exists() ? userSnap.data() : {};
+        
+        getDocs(q(col(db, "employees"), w("employeeId", "==", employeeId), w("uid", "==", user.uid)))
+          .then((snap) => {
+            if (!snap.empty) {
+              const d = snap.docs[0].data();
+              setEmpData({
+                firstName:      d.firstName      ?? "",
+                lastName:       d.lastName       ?? "",
+                email:          d.email          ?? "",
+                phone:          userData.phone   || d.phone || "",
+                dob:            d.dob            ?? "",
+                gender:         d.gender         ?? "",
+                department:     d.department     ?? "",
+                designation:    d.designation    ?? "",
+                joiningDate:    d.joiningDate    ?? "",
+                employeeId:     d.employeeId     ?? "",
+                employmentType: d.employmentType ?? "",
+              });
+              setPhone(userData.phone || d.phone || "");
+            }
+            setLoadingEmp(false);
+          })
+          .catch(() => setLoadingEmp(false));
+      }).catch(() => setLoadingEmp(false));
+    });
+  }, [profile?.employeeId, user?.uid]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { collection: col, query: q, where: w, getDocs, doc: fsDoc, updateDoc, serverTimestamp: sts } = await import("firebase/firestore");
+      const employeeId = profile?.employeeId;
+      
+      // Try to update the employees collection. Catch any permission errors since employees may have write-restrictions in production.
+      if (employeeId && user?.uid) {
+        try {
+          const snap = await getDocs(q(col(db, "employees"), w("employeeId", "==", employeeId), w("uid", "==", user.uid)));
+          if (!snap.empty) {
+            await updateDoc(fsDoc(db, "employees", snap.docs[0].id), { phone, updatedAt: sts() });
+          }
+        } catch (err) {
+          console.warn("Direct update on employees doc restricted by Firestore security rules, falling back to users doc:", err);
+        }
+      }
+
+      // Always update the users collection which is fully writable by the owner.
+      if (user?.uid) {
+        const { doc: fsDoc2, updateDoc: upDoc } = await import("firebase/firestore");
+        await upDoc(fsDoc2(db, "users", user.uid), { phone, updatedAt: sts() });
+      }
+      
+      toast.success("Profile updated!");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error("Failed to save changes:", err);
+      toast.error("Failed to save. Try again.");
+    }
+    setSaving(false);
+  };
+
+  const Row = ({ label, value }: { label: string; value: string }) => (
+    <div style={{ padding: "12px 14px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 500 }}>{value || "—"}</div>
+    </div>
+  );
+
   return (
     <div>
-      <h2 style={{ fontSize:16,fontWeight:700,marginBottom:16 }}>Personal Information</h2>
-      <div style={{ display:"flex",alignItems:"center",gap:16,marginBottom:24 }}>
-        <div style={{ width:64,height:64,borderRadius:"50%",background:"var(--accent-blue-dim)",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--accent-blue)" }}><User size={24}/></div>
-        <div><button className="btn btn-secondary" style={{ padding:"6px 12px",fontSize:12,gap:6 }}><Camera size={14}/>Upload Picture</button><div style={{ fontSize:11,color:"var(--text-muted)",marginTop:4 }}>JPEG, PNG up to 2MB</div></div>
-      </div>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
-        <div><label style={{ fontSize:13,color:"var(--text-secondary)",display:"block",marginBottom:6 }}>Phone Number</label><input className="input-base" type="tel" placeholder="+91 XXXXX XXXXX"/></div>
-        <div><label style={{ fontSize:13,color:"var(--text-secondary)",display:"block",marginBottom:6 }}>Backup Phone Number</label><input className="input-base" type="tel" placeholder="+91 XXXXX XXXXX"/></div>
-        <div style={{ gridColumn:"1/-1" }}><label style={{ fontSize:13,color:"var(--text-secondary)",display:"block",marginBottom:6 }}>Aadhar Number</label><input className="input-base" type="text" placeholder="XXXX XXXX XXXX"/></div>
-      </div>
-      <button className="btn btn-primary" style={{ gap:6 }} onClick={()=>{ toast.success("Personal information updated!"); setSaved(true); setTimeout(()=>setSaved(false),2000); }}>
-        {saved?<Check size={14}/>:<Save size={14}/>}{saved?"Saved!":"Save Personal Info"}
-      </button>
+      <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>My Profile</h2>
+      <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 20 }}>Your personal information and employment details.</p>
+
+      {loadingEmp ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13 }}>
+          <Loader2 size={15} className="animate-spin" /> Loading profile…
+        </div>
+      ) : (
+        <>
+          {/* Read-only details */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+            <Row label="First Name"       value={empData.firstName} />
+            <Row label="Last Name"        value={empData.lastName} />
+            <Row label="Employee ID"      value={empData.employeeId} />
+            <Row label="Login Email"      value={empData.email || `${empData.employeeId?.toLowerCase()}@mwu-ems.app`} />
+            <Row label="Department"       value={empData.department} />
+            <Row label="Designation"      value={empData.designation} />
+            <Row label="Employment Type"  value={empData.employmentType} />
+            <Row label="Joining Date"     value={empData.joiningDate} />
+            <Row label="Date of Birth"    value={empData.dob} />
+            <Row label="Gender"           value={empData.gender} />
+          </div>
+
+          {/* Editable field: Phone */}
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Update Contact</h3>
+            <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Phone Number</label>
+            <input
+              className="input-base"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+91 XXXXX XXXXX"
+              style={{ maxWidth: 280 }}
+            />
+          </div>
+
+          <button className="btn btn-primary" style={{ gap: 6 }} onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />}
+            {saving ? "Saving…" : saved ? "Saved!" : "Save Changes"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

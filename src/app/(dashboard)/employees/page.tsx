@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   UserPlus, Search, Filter, Download, LayoutGrid, List,
   MoreHorizontal, Mail, Phone, Building2, ChevronDown, Users, Loader2,
-  Eye, Trash2, CheckCircle, XCircle,
+  Eye, Trash2, CheckCircle, XCircle, KeyRound, EyeOff,
 } from "lucide-react";
 import { formatDate, getInitials } from "@/lib/utils";
 import { db } from "@/lib/firebase";
@@ -16,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { useDepartments } from "@/hooks/useDepartments";
 import { useAuthStore } from "@/store/auth.store";
+import { updateEmployeeAuth } from "@/lib/firebase-secondary";
 
 type EmpRow = {
   id: string;
@@ -29,6 +30,8 @@ type EmpRow = {
   status: string;
   joiningDate: string;
   salary: number;
+  uid: string;
+  password: string;
 };
 
 const statusColor: Record<string, string> = {
@@ -42,7 +45,78 @@ const statusBg: Record<string, string> = {
   Archived: "rgba(255,255,255,0.06)",
 };
 
-/* ─── Confirm Dialog ─── */
+/* ─── Credentials Modal ─── */
+function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }) {
+  const [showPass, setShowPass] = useState(false);
+  const [newPass, setNewPass]   = useState("");
+  const [curPass, setCurPass]   = useState(emp.password || "");
+  const [showCur, setShowCur]   = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  const handleSave = async () => {
+    if (!newPass.trim()) { toast.error("Enter a new password."); return; }
+    if (!curPass.trim()) { toast.error("Enter current password to authorize."); return; }
+    setSaving(true);
+    try {
+      await updateEmployeeAuth(emp.employeeId, curPass, emp.employeeId, newPass);
+      await updateDoc(doc(db, "employees", emp.id), { password: newPass, updatedAt: serverTimestamp() });
+      if (emp.uid) await updateDoc(doc(db, "users", emp.uid), { updatedAt: serverTimestamp() });
+      toast.success("Password updated successfully!");
+      onClose();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update password.");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
+      <div className="card" style={{ padding: 28, width: 440, background: "var(--bg-primary)" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Portal Credentials</div>
+          <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={onClose}><EyeOff size={16} /></button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Username (read-only) */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>Login Email</label>
+            <input className="input-base" readOnly value={`${emp.employeeId.toLowerCase()}@mwu-ems.app`} style={{ color: "var(--text-muted)", cursor: "text" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>Employee ID (Username)</label>
+            <input className="input-base" readOnly value={emp.employeeId} style={{ color: "var(--text-muted)" }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>Current Password</label>
+            <div style={{ position: "relative" }}>
+              <input className="input-base" type={showCur ? "text" : "password"} value={curPass} onChange={(e) => setCurPass(e.target.value)} placeholder="Enter current password" />
+              <button type="button" className="btn btn-ghost" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "4px 6px" }} onClick={() => setShowCur(!showCur)}>
+                {showCur ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>New Password</label>
+            <div style={{ position: "relative" }}>
+              <input className="input-base" type={showPass ? "text" : "password"} value={newPass} onChange={(e) => setNewPass(e.target.value)} placeholder="Enter new password" />
+              <button type="button" className="btn btn-ghost" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "4px 6px" }} onClick={() => setShowPass(!showPass)}>
+                {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+          <button className="btn btn-primary" style={{ flex: 1, gap: 6 }} onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
+            {saving ? "Saving…" : "Update Password"}
+          </button>
+          <button className="btn btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function ConfirmDialog({
   message, onConfirm, onCancel, danger = false,
 }: {
@@ -83,10 +157,12 @@ function ConfirmDialog({
 function ActionMenu({
   emp,
   onView,
+  onCredentials,
   onRefresh,
 }: {
   emp: EmpRow;
   onView: () => void;
+  onCredentials: () => void;
   onRefresh?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -154,8 +230,13 @@ function ActionMenu({
 
   const items = [
     {
-      icon: Eye,   label: "View Profile",
+      icon: Eye,      label: "View Profile",
       action: () => { setOpen(false); onView(); },
+      danger: false, divider: false,
+    },
+    {
+      icon: KeyRound, label: "View Credentials",
+      action: () => { setOpen(false); onCredentials(); },
       danger: false, divider: false,
     },
     {
@@ -279,6 +360,7 @@ export default function EmployeesPage() {
   const [status, setStatus] = useState("All");
   const [employees, setEmployees] = useState<EmpRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [credEmp, setCredEmp] = useState<EmpRow | null>(null);
   const { departments } = useDepartments();
 
   // Redirect non-admins away
@@ -309,6 +391,8 @@ export default function EmployeesPage() {
             status:      data.status      ?? "Active",
             joiningDate: data.joiningDate ?? "",
             salary:      data.salary      ?? 0,
+            uid:         data.uid         ?? "",
+            password:    data.password    ?? "",
           };
         });
         setEmployees(rows);
@@ -335,6 +419,10 @@ export default function EmployeesPage() {
 
   return (
     <div className="page-container">
+      {/* Credentials Modal */}
+      {credEmp && (
+        <CredentialsModal emp={credEmp} onClose={() => setCredEmp(null)} />
+      )}
       {/* Header */}
       <div className="page-header">
         <div>
@@ -478,6 +566,7 @@ export default function EmployeesPage() {
                     <ActionMenu
                       emp={e}
                       onView={() => router.push(`/employees/${e.id}`)}
+                      onCredentials={() => setCredEmp(e)}
                     />
                   </td>
                 </tr>

@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateEmail, updatePassword } from "firebase/auth";
 
 const SECONDARY_APP_NAME = "ems-secondary";
 
@@ -55,4 +55,38 @@ export async function createEmployeeAuth(
   }
 
   return { uid, email };
+}
+
+export async function updateEmployeeAuth(
+  oldEmployeeId: string,
+  oldPassword: string,
+  newEmployeeId: string,
+  newPassword?: string
+): Promise<{ email: string }> {
+  const email = `${oldEmployeeId.toLowerCase()}@mwu-ems.app`;
+  const newEmail = `${newEmployeeId.toLowerCase()}@mwu-ems.app`;
+
+  const secondaryApp =
+    getApps().find((a) => a.name === SECONDARY_APP_NAME) ||
+    initializeApp(firebaseConfig, SECONDARY_APP_NAME);
+
+  const secondaryAuth = getAuth(secondaryApp);
+
+  try {
+    const cred = await signInWithEmailAndPassword(secondaryAuth, email, oldPassword);
+    
+    if (email !== newEmail) {
+      await updateEmail(cred.user, newEmail);
+    }
+    if (newPassword && newPassword.trim()) {
+      await updatePassword(cred.user, newPassword);
+    }
+  } catch (error: unknown) {
+    const err = error as Error;
+    throw new Error(err.message || "Failed to update employee credentials.");
+  } finally {
+    await signOut(secondaryAuth);
+  }
+
+  return { email: newEmail };
 }

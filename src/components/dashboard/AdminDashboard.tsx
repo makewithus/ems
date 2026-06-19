@@ -10,37 +10,18 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import {
-  collection, onSnapshot, query, orderBy, updateDoc, doc, serverTimestamp,
+  collection, onSnapshot, query, orderBy, updateDoc, doc, serverTimestamp, where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "sonner";
 
-/* ─── Static chart data ─── */
-const attendanceData = [
-  { day: "Mon", present: 42, absent: 8, late: 5 },
-  { day: "Tue", present: 45, absent: 5, late: 3 },
-  { day: "Wed", present: 48, absent: 4, late: 2 },
-  { day: "Thu", present: 44, absent: 7, late: 4 },
-  { day: "Fri", present: 50, absent: 2, late: 1 },
-  { day: "Sat", present: 12, absent: 40, late: 0 },
-];
-
-const leaveTypeData = [
-  { name: "Casual",    value: 24, color: "var(--text-primary)" },
-  { name: "Medical",   value: 18, color: "var(--brand-red)" },
-  { name: "Emergency", value: 8,  color: "#d98c00" },
-  { name: "Paid",      value: 14, color: "var(--text-secondary)" },
-  { name: "Unpaid",    value: 6,  color: "var(--text-muted)" },
-];
-
-const growthData = [
-  { month: "Jan", employees: 38 },
-  { month: "Feb", employees: 40 },
-  { month: "Mar", employees: 43 },
-  { month: "Apr", employees: 45 },
-  { month: "May", employees: 50 },
-  { month: "Jun", employees: 58 },
+const PIE_COLORS = [
+  "var(--text-primary)",
+  "var(--brand-red)",
+  "#d98c00",
+  "var(--text-secondary)",
+  "var(--text-muted)",
 ];
 
 const tooltipStyle = {
@@ -51,14 +32,6 @@ const tooltipStyle = {
   color: "var(--text-primary)",
 };
 
-/* ─── Fallback leave requests shown before Firestore loads ─── */
-const FALLBACK_LEAVES = [
-  { id: "fl1", name: "Arjun Mehta",    type: "Medical",   days: "3 days",  date: "May 23–25", status: "Pending" },
-  { id: "fl2", name: "Priya Sharma",   type: "Casual",    days: "1 day",   date: "May 24",    status: "Pending" },
-  { id: "fl3", name: "Rahul Gupta",    type: "Emergency", days: "2 days",  date: "May 22–23", status: "Pending" },
-  { id: "fl4", name: "Sneha Patel",    type: "Paid",      days: "5 days",  date: "May 26–30", status: "Pending" },
-];
-
 type LeaveRequest = {
   id: string;
   name: string;
@@ -66,109 +39,221 @@ type LeaveRequest = {
   days: string;
   date: string;
   status: string;
-  isMock?: boolean;
 };
 
 export default function AdminDashboard() {
   const { profile } = useAuthStore();
 
   /* ─── Live state ─── */
-  const [employeeCount, setEmployeeCount] = useState(58);
+  const [employeeCount, setEmployeeCount] = useState(0);
+  const [presentCount, setPresentCount]   = useState(0);
+  const [absentCount, setAbsentCount]     = useState(0);
+  const [documentCount, setDocumentCount] = useState(0);
+  const [noticeCount, setNoticeCount]     = useState(0);
+  const [payrollTotal, setPayrollTotal]   = useState(0);
   const [pendingLeaves, setPendingLeaves] = useState<LeaveRequest[]>([]);
-  const [departmentData, setDepartmentData] = useState([
-    { name: "Engineering", count: 18 },
-    { name: "Sales", count: 12 },
-    { name: "HR", count: 6 },
-    { name: "Finance", count: 8 },
-    { name: "Design", count: 5 },
-    { name: "Ops", count: 9 },
-  ]);
   const [loadingLeaves, setLoadingLeaves] = useState(true);
-  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [processingId, setProcessingId]  = useState<string | null>(null);
+  const [departmentData, setDepartmentData] = useState<{ name: string; count: number }[]>([]);
+  const [growthData, setGrowthData] = useState<{ month: string; employees: number }[]>([]);
+  const [attendanceData, setAttendanceData] = useState<{ day: string; present: number; absent: number; late: number }[]>([]);
+  const [leaveTypeData, setLeaveTypeData] = useState<{ name: string; value: number; color: string }[]>([]);
+  const [birthdayCount, setBirthdayCount] = useState(0);
 
-  /* ── Real-time employees count ── */
+  /* ── Real-time employees count, growth, departments, birthdays ── */
   useEffect(() => {
-    let unsub = () => {};
-    const t = setTimeout(() => {
-      const q = query(collection(db, "employees"), orderBy("createdAt", "desc"));
-      unsub = onSnapshot(
-        q,
-        (snap) => {
-          if (!snap.empty) {
-            setEmployeeCount(snap.size);
-            // Compute department breakdown dynamically
-            const deptMap: Record<string, number> = {};
-            snap.docs.forEach((d) => {
-              const dept = d.data().department || "Other";
-              deptMap[dept] = (deptMap[dept] || 0) + 1;
-            });
-            const deptArr = Object.entries(deptMap).map(([name, count]) => ({ name, count }));
-            if (deptArr.length > 0) setDepartmentData(deptArr);
-          }
-        },
-        () => {} // silently ignore errors, use defaults
-      );
-    }, 10);
-    return () => {
-      clearTimeout(t);
-      unsub();
-    };
+    const q = query(collection(db, "employees"), orderBy("createdAt", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const allEmps = snap.docs.map((d) => d.data());
+      setEmployeeCount(allEmps.length);
+
+      // Department breakdown
+      const deptMap: Record<string, number> = {};
+      allEmps.forEach((e) => {
+        const dept = e.department || "Other";
+        deptMap[dept] = (deptMap[dept] || 0) + 1;
+      });
+      setDepartmentData(Object.entries(deptMap).map(([name, count]) => ({ name, count })));
+
+      // Employee growth by month (from createdAt timestamps)
+      const monthMap: Record<string, number> = {};
+      allEmps.forEach((e) => {
+        if (!e.createdAt) return;
+        const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
+        const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
+        monthMap[key] = (monthMap[key] || 0) + 1;
+      });
+      const growthArr = Object.entries(monthMap).map(([month, employees]) => ({ month, employees }));
+      // Show running cumulative total
+      let running = 0;
+      const cumulative = growthArr.map(({ month, employees }) => {
+        running += employees;
+        return { month, employees: running };
+      });
+      setGrowthData(cumulative.slice(-6));
+
+      // Birthdays this week
+      const today = new Date();
+      const weekEnd = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+      let bdays = 0;
+      allEmps.forEach((e) => {
+        if (!e.dob) return;
+        const dob = new Date(e.dob);
+        const thisYearBday = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+        if (thisYearBday >= today && thisYearBday <= weekEnd) bdays++;
+      });
+      setBirthdayCount(bdays);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  /* ── Today's attendance stats ── */
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const q = query(collection(db, "attendance"), where("date", "==", todayStr));
+    const unsub = onSnapshot(q, (snap) => {
+      let present = 0, absent = 0;
+      snap.docs.forEach((d) => {
+        const s = d.data().status ?? "";
+        if (s === "Present" || s === "Late") present++;
+        else if (s === "Absent") absent++;
+      });
+      setPresentCount(present);
+      setAbsentCount(absent);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  /* ── Weekly attendance chart data (last 7 days) ── */
+  useEffect(() => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay() + 1);
+
+    const weekDates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(startOfWeek);
+      d.setDate(startOfWeek.getDate() + i);
+      weekDates.push(d.toISOString().split("T")[0]);
+    }
+
+    // Only fetch if we have a valid range
+    if (weekDates.length === 0) return;
+
+    const q = query(collection(db, "attendance"), where("date", "in", weekDates));
+    const unsub = onSnapshot(q, (snap) => {
+      const dayMap: Record<string, { present: number; absent: number; late: number }> = {};
+      weekDates.forEach((dateStr) => {
+        dayMap[dateStr] = { present: 0, absent: 0, late: 0 };
+      });
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const date = data.date;
+        if (!dayMap[date]) return;
+        if (data.status === "Present") dayMap[date].present++;
+        else if (data.status === "Late") { dayMap[date].present++; dayMap[date].late++; }
+        else if (data.status === "Absent") dayMap[date].absent++;
+      });
+      const result = weekDates.map((dateStr, i) => ({
+        day: days[i],
+        ...dayMap[dateStr],
+      }));
+      setAttendanceData(result);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  /* ── Leave type distribution ── */
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "leaveRequests"), (snap) => {
+      const typeMap: Record<string, number> = {};
+      snap.docs.forEach((d) => {
+        const t = d.data().leaveType ?? "Other";
+        typeMap[t] = (typeMap[t] || 0) + 1;
+      });
+      const arr = Object.entries(typeMap).map(([name, value], i) => ({
+        name, value, color: PIE_COLORS[i % PIE_COLORS.length],
+      }));
+      setLeaveTypeData(arr);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  /* ── Documents count ── */
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "documents"), (snap) => {
+      setDocumentCount(snap.size);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  /* ── Notices count (new/unread) ── */
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "notices"), (snap) => {
+      // Count notices created in last 7 days as "new"
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      let newCount = 0;
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        const created = data.createdAt?.toDate?.() ?? null;
+        if (created && created >= weekAgo) newCount++;
+      });
+      setNoticeCount(newCount);
+    }, () => {});
+    return () => unsub();
+  }, []);
+
+  /* ── Payroll total (current month) ── */
+  useEffect(() => {
+    const now = new Date();
+    const monthLabel = now.toLocaleString("default", { month: "long", year: "numeric" });
+    const q = query(collection(db, "payroll"), where("month", "==", monthLabel));
+    const unsub = onSnapshot(q, (snap) => {
+      const total = snap.docs.reduce((sum, d) => sum + (d.data().net ?? 0), 0);
+      setPayrollTotal(total);
+    }, () => {});
+    return () => unsub();
   }, []);
 
   /* ── Real-time pending leave requests ── */
   useEffect(() => {
-    let unsub = () => {};
-    const t = setTimeout(() => {
-      const q = query(collection(db, "leaveRequests"), orderBy("createdAt", "desc"));
-      unsub = onSnapshot(
-        q,
-        (snap) => {
-          const rows: LeaveRequest[] = snap.docs
-            .map((d) => {
-              const data = d.data();
-              const start = data.startDate ?? "";
-              const end   = data.endDate   ?? "";
-              const fmt = (s: string) =>
-                s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
-              return {
-                id:     d.id,
-                name:   data.employeeName ?? "Employee",
-                type:   data.leaveType   ?? "",
-                days:   `${data.days ?? 1} day${(data.days ?? 1) > 1 ? "s" : ""}`,
-                date:   start === end || !end ? fmt(start) : `${fmt(start)}–${fmt(end)}`,
-                status: data.status      ?? "Pending",
-              };
-            })
-            .filter((r) => r.status === "Pending");
+    const q = query(collection(db, "leaveRequests"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const rows: LeaveRequest[] = snap.docs
+          .map((d) => {
+            const data = d.data();
+            const start = data.startDate ?? "";
+            const end   = data.endDate   ?? "";
+            const fmt = (s: string) =>
+              s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+            return {
+              id:     d.id,
+              name:   data.employeeName ?? "Employee",
+              type:   data.leaveType   ?? "",
+              days:   `${data.days ?? 1} day${(data.days ?? 1) > 1 ? "s" : ""}`,
+              date:   start === end || !end ? fmt(start) : `${fmt(start)}–${fmt(end)}`,
+              status: data.status      ?? "Pending",
+            };
+          })
+          .filter((r) => r.status === "Pending");
 
-          // If Firestore is empty, show fallback mock data
-          setPendingLeaves(rows.length > 0 ? rows : FALLBACK_LEAVES);
-          setLoadingLeaves(false);
-        },
-        () => {
-          setPendingLeaves(FALLBACK_LEAVES);
-          setLoadingLeaves(false);
-        }
-      );
-    }, 10);
-    return () => {
-      clearTimeout(t);
-      unsub();
-    };
+        setPendingLeaves(rows);
+        setLoadingLeaves(false);
+      },
+      () => {
+        setPendingLeaves([]);
+        setLoadingLeaves(false);
+      }
+    );
+    return () => unsub();
   }, []);
 
   /* ── Approve / Reject ── */
-  const handleLeaveAction = async (id: string, action: "Approved" | "Rejected", isMock?: boolean) => {
+  const handleLeaveAction = async (id: string, action: "Approved" | "Rejected") => {
     setProcessingId(id);
-    if (isMock) {
-      // For mock data just update local state
-      setTimeout(() => {
-        setPendingLeaves((prev) => prev.filter((r) => r.id !== id));
-        toast.success(`Leave request ${action.toLowerCase()} successfully!`);
-        setProcessingId(null);
-      }, 600);
-      return;
-    }
     try {
       await updateDoc(doc(db, "leaveRequests", id), {
         status:     action,
@@ -186,15 +271,22 @@ export default function AdminDashboard() {
 
   const pendingCount = pendingLeaves.length;
 
+  /* ── Format payroll total ── */
+  const formatPayroll = (n: number) => {
+    if (n >= 10_00_000) return `₹${(n / 10_00_000).toFixed(1)}L`;
+    if (n >= 1000) return `₹${(n / 1000).toFixed(0)}K`;
+    return `₹${n}`;
+  };
+
   const STATS = [
-    { label: "Total Employees",      value: String(employeeCount), icon: Users,       color: "var(--accent-blue)",   delta: "+3 this month",    up: true  },
-    { label: "Present Today",        value: String(Math.round(employeeCount * 0.86)), icon: Clock, color: "var(--accent-green)",  delta: "86% attendance",   up: true  },
-    { label: "Absent Today",         value: String(Math.round(employeeCount * 0.14)), icon: UserX, color: "var(--accent-red)",    delta: "↓ 2 from yesterday",up: false },
-    { label: "Pending Leaves",       value: String(pendingCount),  icon: CalendarDays, color: "var(--accent-amber)",  delta: `${Math.min(pendingCount,4)} urgent`, up: false },
-    { label: "Payroll Generated",    value: "₹18.4L",              icon: DollarSign,  color: "var(--accent-purple)", delta: "May 2025",         up: true  },
-    { label: "Documents",            value: "247",                  icon: FolderOpen,  color: "var(--accent-blue)",   delta: "+14 this week",    up: true  },
-    { label: "Birthdays This Week",  value: "3",                    icon: Cake,        color: "var(--accent-amber)",  delta: "Send wishes!",     up: true  },
-    { label: "New Notices",          value: "5",                    icon: Megaphone,   color: "var(--accent-red)",    delta: "2 unread",         up: false },
+    { label: "Total Employees",     value: String(employeeCount || 0), icon: Users,       color: "var(--accent-blue)",   delta: "Active employees",      up: true  },
+    { label: "Present Today",       value: String(presentCount),        icon: Clock,       color: "var(--accent-green)",  delta: `${employeeCount ? Math.round(presentCount / employeeCount * 100) : 0}% attendance`, up: true  },
+    { label: "Absent Today",        value: String(absentCount),         icon: UserX,       color: "var(--accent-red)",    delta: "From attendance records", up: false },
+    { label: "Pending Leaves",      value: String(pendingCount),        icon: CalendarDays,color: "var(--accent-amber)",  delta: `${Math.min(pendingCount,4)} urgent`,      up: false },
+    { label: "Payroll This Month",  value: payrollTotal > 0 ? formatPayroll(payrollTotal) : "—", icon: DollarSign, color: "var(--accent-purple)", delta: new Date().toLocaleString("default", { month: "long" }), up: true },
+    { label: "Documents",           value: String(documentCount || 0),  icon: FolderOpen,  color: "var(--accent-blue)",   delta: "Total files",            up: true  },
+    { label: "Birthdays This Week", value: String(birthdayCount || 0),  icon: Cake,        color: "var(--accent-amber)",  delta: birthdayCount > 0 ? "Send wishes! 🎂" : "No birthdays", up: birthdayCount > 0 },
+    { label: "New Notices",         value: String(noticeCount || 0),    icon: Megaphone,   color: "var(--accent-red)",    delta: "This week",              up: false },
   ];
 
   return (
@@ -232,38 +324,50 @@ export default function AdminDashboard() {
         {/* Attendance Trend */}
         <div className="card" style={{ padding: "20px 20px 12px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Weekly Attendance</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={attendanceData} barSize={10} barGap={2}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--bg-secondary)" }} />
-              <Bar dataKey="present" fill="var(--text-primary)" radius={[0, 0, 0, 0]} name="Present" />
-              <Bar dataKey="absent"  fill="var(--brand-red)" radius={[0, 0, 0, 0]} name="Absent" />
-              <Bar dataKey="late"    fill="var(--text-muted)" radius={[0, 0, 0, 0]} name="Late" />
-              <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-muted)" }} />
-            </BarChart>
-          </ResponsiveContainer>
+          {attendanceData.length === 0 ? (
+            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13 }}>
+              No attendance records this week
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={attendanceData} barSize={10} barGap={2}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--bg-secondary)" }} />
+                <Bar dataKey="present" fill="var(--text-primary)" radius={[0, 0, 0, 0]} name="Present" />
+                <Bar dataKey="absent"  fill="var(--brand-red)" radius={[0, 0, 0, 0]} name="Absent" />
+                <Bar dataKey="late"    fill="var(--text-muted)" radius={[0, 0, 0, 0]} name="Late" />
+                <Legend iconSize={8} wrapperStyle={{ fontSize: 11, color: "var(--text-muted)" }} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {/* Employee Growth */}
         <div className="card" style={{ padding: "20px 20px 12px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Employee Growth</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={growthData}>
-              <defs>
-                <linearGradient id="empGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#3B82F6" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-strong)" />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="employees" stroke="var(--text-primary)" fill="transparent" strokeWidth={2} dot={{ r: 3, fill: "var(--text-primary)" }} name="Employees" />
-            </AreaChart>
-          </ResponsiveContainer>
+          {growthData.length === 0 ? (
+            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13 }}>
+              No employee data yet
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={growthData}>
+                <defs>
+                  <linearGradient id="empGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="#3B82F6" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-strong)" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Area type="monotone" dataKey="employees" stroke="var(--text-primary)" fill="transparent" strokeWidth={2} dot={{ r: 3, fill: "var(--text-primary)" }} name="Employees" />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -272,39 +376,53 @@ export default function AdminDashboard() {
         {/* Dept breakdown — live */}
         <div className="card" style={{ padding: "20px 20px 12px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Employees by Department</div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={departmentData} layout="vertical" barSize={10}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} width={80} />
-              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--bg-secondary)" }} />
-              <Bar dataKey="count" fill="var(--text-primary)" radius={[0, 0, 0, 0]} name="Employees" />
-            </BarChart>
-          </ResponsiveContainer>
+          {departmentData.length === 0 ? (
+            <div style={{ height: 200, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13 }}>
+              No department data
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={departmentData} layout="vertical" barSize={10}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} width={100} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--bg-secondary)" }} />
+                <Bar dataKey="count" fill="var(--text-primary)" radius={[0, 0, 0, 0]} name="Employees" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {/* Leave Pie */}
         <div className="card" style={{ padding: "20px 20px 12px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Leave Distribution</div>
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie data={leaveTypeData} cx="50%" cy="50%" innerRadius={45} outerRadius={68} dataKey="value" paddingAngle={3}>
-                {leaveTypeData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-              </Pie>
-              <Tooltip contentStyle={tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
-            {leaveTypeData.map((d) => (
-              <div key={d.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.color, display: "inline-block" }} />
-                  {d.name}
-                </div>
-                <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{d.value}</span>
+          {leaveTypeData.length === 0 ? (
+            <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13 }}>
+              No leave requests yet
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={leaveTypeData} cx="50%" cy="50%" innerRadius={45} outerRadius={68} dataKey="value" paddingAngle={3}>
+                    {leaveTypeData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+                {leaveTypeData.map((d) => (
+                  <div key={d.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.color, display: "inline-block" }} />
+                      {d.name}
+                    </div>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{d.value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -358,7 +476,7 @@ export default function AdminDashboard() {
                     className="btn btn-primary"
                     style={{ padding: "5px 12px", fontSize: 12, gap: 4 }}
                     disabled={processingId === r.id}
-                    onClick={() => handleLeaveAction(r.id, "Approved", r.isMock)}
+                    onClick={() => handleLeaveAction(r.id, "Approved")}
                   >
                     {processingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
                     Approve
@@ -367,7 +485,7 @@ export default function AdminDashboard() {
                     className="btn btn-danger"
                     style={{ padding: "5px 12px", fontSize: 12, gap: 4 }}
                     disabled={processingId === r.id}
-                    onClick={() => handleLeaveAction(r.id, "Rejected", r.isMock)}
+                    onClick={() => handleLeaveAction(r.id, "Rejected")}
                   >
                     {processingId === r.id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
                     Reject

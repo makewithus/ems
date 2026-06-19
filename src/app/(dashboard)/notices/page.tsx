@@ -39,6 +39,8 @@ export default function NoticesPage() {
   const [loading, setLoading] = useState(true);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [filter, setFilter] = useState("All");
+  /* Local optimistic set — UI updates instantly without waiting for Firestore snapshot */
+  const [localReadIds, setLocalReadIds] = useState<Set<string>>(new Set());
   const { departments } = useDepartments();
   const [newNotice, setNewNotice] = useState({
     title: "", desc: "", priority: "Normal", dept: "All", publish: "", expiry: "",
@@ -71,17 +73,31 @@ export default function NoticesPage() {
     return () => unsub();
   }, []);
 
-  /* ── Mark as read — writes uid to Firestore readBy array (persists globally) ── */
+  /* ── Mark as read — optimistic update + Firestore persist ── */
   const markAsRead = async (id: string) => {
-    if (!currentUid || markingId) return;
+    if (!currentUid) {
+      toast.error("You must be logged in to mark notices as read.");
+      return;
+    }
+    if (markingId) return;
+
+    // Optimistically update UI right away
+    setLocalReadIds((prev) => new Set([...prev, id]));
     setMarkingId(id);
+
     try {
       await updateDoc(doc(db, "notices", id), {
         readBy: arrayUnion(currentUid),
       });
       toast.success("Marked as read!");
     } catch {
-      toast.error("Failed to mark as read.");
+      // Revert optimistic update on failure
+      setLocalReadIds((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+      toast.error("Failed to mark as read. Please try again.");
     } finally {
       setMarkingId(null);
     }
@@ -109,7 +125,10 @@ export default function NoticesPage() {
   };
 
   const filtered = filter === "All" ? notices : notices.filter((n) => n.priority === filter);
-  const unreadCount = notices.filter((n) => !n.readBy.includes(currentUid)).length;
+  /* Count notices not yet read — consider both Firestore readBy and local optimistic set */
+  const unreadCount = notices.filter(
+    (n) => !n.readBy.includes(currentUid) && !localReadIds.has(n.id)
+  ).length;
 
   return (
     <div className="page-container">
@@ -147,7 +166,8 @@ export default function NoticesPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {filtered.map((n) => {
             const cfg = PRIORITY_CONFIG[n.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.Normal;
-            const isRead = n.readBy.includes(currentUid);
+            /* Mark as read if Firestore says so OR if optimistic local set has it */
+            const isRead = n.readBy.includes(currentUid) || localReadIds.has(n.id);
             return (
               <div key={n.id} className="card" style={{ padding: "18px 20px", opacity: isRead ? 0.65 : 1, transition: "opacity 0.2s", borderLeft: `3px solid ${cfg.color}` }}>
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>

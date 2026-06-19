@@ -186,6 +186,7 @@ export default function AddEmployeePage() {
         salary: data.salary,
         salaryDate: data.salaryDate,
         status: "Active",
+        password: data.password,
         createdAt: now,
         updatedAt: now,
       });
