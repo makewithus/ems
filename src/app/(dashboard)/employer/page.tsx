@@ -168,7 +168,7 @@ function ContactModal({ member, onClose }: { member: Member; onClose: () => void
       onClick={onClose}
     >
       <div
-        className="card"
+        className="card emp-modal-box"
         style={{ padding: 28, width: 480, background: "var(--bg-primary)", boxShadow: "0 24px 64px rgba(0,0,0,0.4)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -264,7 +264,7 @@ function MemberCard({ member }: { member: Member }) {
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 10 }}>
               Key Responsibilities
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 8px" }}>
+            <div className="emp-resp-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 8px" }}>
               {member.highlights.map((h) => (
                 <div key={h} style={{ display: "flex", alignItems: "flex-start", gap: 7, fontSize: 12 }}>
                   <span style={{ width: 5, height: 5, borderRadius: "50%", background: member.accentColor, flexShrink: 0, marginTop: 5 }} />
@@ -378,7 +378,22 @@ function KPICard({ kpi }: { kpi: KPI }) {
 ───────────────────────────────────────────── */
 export default function EmployerPage() {
   return (
-    <div className="page-container">
+    <>
+      <style>{`
+        @media (max-width: 768px) {
+          .emp-org-grid    { grid-template-columns: repeat(2, 1fr) !important; }
+          .emp-member-grid { grid-template-columns: 1fr !important; }
+          .emp-kpi-grid    { grid-template-columns: repeat(2, 1fr) !important; }
+          .emp-vision-grid { grid-template-columns: 1fr !important; }
+          .emp-resp-grid   { grid-template-columns: 1fr !important; }
+          .emp-modal-box   { width: calc(100vw - 32px) !important; max-width: 100% !important; }
+        }
+        @media (max-width: 480px) {
+          .emp-org-grid  { grid-template-columns: 1fr !important; }
+          .emp-kpi-grid  { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+      <div className="page-container">
       {/* ── Header ── */}
       <div className="page-header">
         <div>
@@ -392,7 +407,7 @@ export default function EmployerPage() {
       </div>
 
       {/* ── Company Overview Cards ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+      <div className="emp-org-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
         {ORG_STATS.map((s) => (
           <div key={s.label} className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden" }}>
             <div style={{
@@ -420,7 +435,7 @@ export default function EmployerPage() {
         <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 36 }}>
+      <div className="emp-member-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 36 }}>
         {MEMBERS.map((m) => <MemberCard key={m.id} member={m} />)}
       </div>
 
@@ -436,7 +451,7 @@ export default function EmployerPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 36 }}>
+      <div className="emp-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 36 }}>
         {KPIS.map((k) => <KPICard key={k.label} kpi={k} />)}
       </div>
 
@@ -450,7 +465,7 @@ export default function EmployerPage() {
       </div>
 
       <div className="card" style={{ padding: 28 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+        <div className="emp-vision-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
           {[
             {
               icon: Award,
@@ -481,6 +496,7 @@ export default function EmployerPage() {
           ))}
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
