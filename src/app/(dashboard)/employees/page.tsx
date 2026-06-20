@@ -171,13 +171,18 @@ function ActionMenu({
   const btnRef  = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  /* Open: compute button position for the portal */
+  /* Open: compute button position for the portal, flip upward if near bottom */
   const handleOpen = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!open && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
+      const DROPDOWN_H = 280; // conservative estimated height of the menu
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp     = spaceBelow < DROPDOWN_H;
       setMenuPos({
-        top:   rect.bottom + 6,
+        top:   openUp
+          ? Math.max(8, rect.top - DROPDOWN_H - 6)  // flip above the button
+          : rect.bottom + 6,                          // default: below the button
         right: window.innerWidth - rect.right,
       });
     }
