@@ -65,19 +65,21 @@ export default function AdminDashboard() {
     const q = query(collection(db, "employees"), orderBy("createdAt", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       const allEmps = snap.docs.map((d) => d.data());
-      setEmployeeCount(allEmps.length);
+      // Exclude archived employees so count reflects real active/inactive headcount
+      const activeEmps = allEmps.filter((e) => e.status !== "Archived");
+      setEmployeeCount(activeEmps.length);
 
-      // Department breakdown
+      // Department breakdown (exclude archived)
       const deptMap: Record<string, number> = {};
-      allEmps.forEach((e) => {
+      activeEmps.forEach((e) => {
         const dept = e.department || "Other";
         deptMap[dept] = (deptMap[dept] || 0) + 1;
       });
       setDepartmentData(Object.entries(deptMap).map(([name, count]) => ({ name, count })));
 
-      // Employee growth by month (from createdAt timestamps)
+      // Employee growth by month (from createdAt timestamps, exclude archived)
       const monthMap: Record<string, number> = {};
-      allEmps.forEach((e) => {
+      activeEmps.forEach((e) => {
         if (!e.createdAt) return;
         const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
         const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
@@ -92,11 +94,11 @@ export default function AdminDashboard() {
       });
       setGrowthData(cumulative.slice(-6));
 
-      // Birthdays this week
+      // Birthdays this week (exclude archived)
       const today = new Date();
       const weekEnd = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
       let bdays = 0;
-      allEmps.forEach((e) => {
+      activeEmps.forEach((e) => {
         if (!e.dob) return;
         const dob = new Date(e.dob);
         const thisYearBday = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
@@ -279,7 +281,7 @@ export default function AdminDashboard() {
   };
 
   const STATS = [
-    { label: "Total Employees",     value: String(employeeCount || 0), icon: Users,       color: "var(--accent-blue)",   delta: "Active employees",      up: true  },
+    { label: "Total Employees",     value: String(employeeCount || 0), icon: Users,       color: "var(--accent-blue)",   delta: "Active & inactive employees", up: true  },
     { label: "Present Today",       value: String(presentCount),        icon: Clock,       color: "var(--accent-green)",  delta: `${employeeCount ? Math.round(presentCount / employeeCount * 100) : 0}% attendance`, up: true  },
     { label: "Absent Today",        value: String(absentCount),         icon: UserX,       color: "var(--accent-red)",    delta: "From attendance records", up: false },
     { label: "Pending Leaves",      value: String(pendingCount),        icon: CalendarDays,color: "var(--accent-amber)",  delta: `${Math.min(pendingCount,4)} urgent`,      up: false },
