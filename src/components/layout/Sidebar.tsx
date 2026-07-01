@@ -4,9 +4,10 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Clock, CalendarDays, DollarSign,
   FolderOpen, Bell, ClipboardList, BarChart3, Settings,
-  ChevronLeft, MessageSquare, Crown,
+  ChevronLeft, MessageSquare,AlertCircle, Crown,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
+// import VoiceWidget from "@/components/VoiceWidget";
 
 const NAV = [
   { href: "/dashboard",     label: "Dashboard",     icon: LayoutDashboard, roles: ["super_admin","hr_admin","employee"] },
@@ -20,9 +21,9 @@ const NAV = [
   { href: "/reports",       label: "Reports",       icon: BarChart3,        roles: ["super_admin","hr_admin"] },
   { href: "/notifications", label: "Notifications", icon: Bell,             roles: ["super_admin","hr_admin","employee"] },
   { href: "/settings",      label: "Settings",      icon: Settings,         roles: ["super_admin","hr_admin","employee"] },
+  { href: "/issues",        label: "Issues",        icon: AlertCircle,      roles: ["super_admin","hr_admin"] },  // ← add this
 ];
 
-// Employer section — always visible to admins
 const EMPLOYER_SECTION = {
   href: "/employer",
   label: "Employer",
@@ -115,7 +116,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
           );
         })}
 
-        {/* ── Employer Section divider + link ── */}
+        {/* Employer Section */}
         {showEmployer && (
           <>
             <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "16px 0" }} />
@@ -149,7 +150,9 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
         )}
       </nav>
 
-      <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "0 16px 32px 16px" }} />
+      {/* ── Voice Widget at bottom ── */}
+      {/* <VoiceWidget sidebarOpen={open} /> */}
+
     </aside>
   );
 }

@@ -38,6 +38,18 @@ scratch_setup.mjs
 Thumbs.db
 *.pem
 
+
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
 # ============================================================
 # Debug logs
 # ============================================================
@@ -58,6 +70,12 @@ pnpm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
+
+credentials/token.pickle
+credentials/client_secret.json
+credentials/*.json
+credentials/*.pickle
+
 # ============================================================
 # Firebase local emulator state
 # ============================================================
@@ -65,3 +83,9 @@ next-env.d.ts
 firebase-debug.log*
 firestore-debug.log*
 ui-debug.log*
+
+
+credentials/token.pickle
+credentials/client_secret.json
+credentials/*.json
+credentials/*.pickle
