@@ -3,38 +3,30 @@ import re
 import pickle
 from datetime import date
 from dotenv import load_dotenv
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 load_dotenv()
 
-SCOPES = ["https://www.googleapis.com/auth/documents",
-]
+SCOPES = ["https://www.googleapis.com/auth/documents"]
 TOKEN_PATH = "credentials/token.pickle"
 CLIENT_SECRET_PATH = "credentials/client_secret.json"
 
 
 def get_docs_service():
     creds = None
-
     if os.path.exists(TOKEN_PATH):
         with open(TOKEN_PATH, "rb") as token:
             creds = pickle.load(token)
-
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                CLIENT_SECRET_PATH, SCOPES
-            )
+            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_PATH, SCOPES)
             creds = flow.run_local_server(port=0)
-
         with open(TOKEN_PATH, "wb") as token:
             pickle.dump(creds, token)
-
     return build("docs", "v1", credentials=creds)
 
 
@@ -53,31 +45,38 @@ def _get_doc_text(doc) -> str:
 
 def _get_last_issue_number(doc) -> int:
     text = _get_doc_text(doc)
-    # Naya format: "Issue #5"
     new_format = re.findall(r"Issue #(\d+)", text)
     if new_format:
         return max([int(n) for n in new_format], default=0)
-    # Purana format fallback: "5."
     old_format = re.findall(r"^\s*(\d+)\.", text, re.MULTILINE)
     return max([int(n) for n in old_format], default=0)
 
 
 def _find_issue_range(doc, issue_number: int):
+    """Naye aur purane dono formats support karta hai."""
     start = None
-    end = None
+    end   = None
     index = 1
 
     for block in doc.get("body", {}).get("content", []):
-        para = block.get("paragraph", {})
+        para      = block.get("paragraph", {})
         full_text = ""
         for elem in para.get("elements", []):
             full_text += elem.get("textRun", {}).get("content", "")
 
-        if re.match(rf"^\s*{issue_number}\.", full_text):
+        # Naya format: "Issue #5" ya "Issue #5 [MODULE]"
+        new_fmt = re.match(rf"^\s*Issue #{issue_number}(?:\s*\[|$|\s*\n)", full_text)
+        # Purana format: "5."
+        old_fmt = re.match(rf"^\s*{issue_number}\.", full_text)
+
+        if new_fmt or old_fmt:
             start = index
-        elif start is not None and re.match(r"^\s*\d+\.", full_text):
-            end = index
-            break
+        elif start is not None:
+            next_new = re.match(r"^\s*Issue #\d+", full_text)
+            next_old = re.match(r"^\s*\d+\.", full_text)
+            if next_new or next_old:
+                end = index
+                break
 
         for elem in para.get("elements", []):
             index += len(elem.get("textRun", {}).get("content", ""))
@@ -88,16 +87,47 @@ def _find_issue_range(doc, issue_number: int):
     return (start, end) if start else None
 
 
-from datetime import date
+def _find_status_position(doc, issue_number: int):
+    """Issue ka status position find karo Google Doc mein."""
+    text = _get_doc_text(doc)
 
-def create_issue(title, description, issue_type="issue", module=None, note=None, doc_id=None, observations=None, priority="medium", status="open"):
+    issue_pattern = re.compile(
+        rf"(Issue #{issue_number}(?:\s*\[[^\]]*\])?.*?)(Status:\s*\w[\w ]*?)(\s+Priority:)",
+        re.DOTALL
+    )
+    issue_match = issue_pattern.search(text)
+    if not issue_match:
+        return None, None
+
+    status_start_char = issue_match.start(2)
+    status_end_char   = issue_match.end(2)
+
+    char_count  = 0
+    start_index = None
+    end_index   = None
+
+    for block in doc.get("body", {}).get("content", []):
+        for elem in block.get("paragraph", {}).get("elements", []):
+            content    = elem.get("textRun", {}).get("content", "")
+            elem_start = elem.get("startIndex", 0)
+            for i, ch in enumerate(content):
+                if char_count == status_start_char:
+                    start_index = elem_start + i
+                if char_count == status_end_char:
+                    end_index = elem_start + i
+                char_count += 1
+
+    return start_index, end_index
+
+
+def create_issue(title, description, issue_type="issue", module=None,
+                 note=None, doc_id=None, observations=None,
+                 priority="medium", status="open"):
     if not doc_id:
         return {"error": "No Google Doc ID provided"}
     try:
-        from datetime import date
-        service = get_docs_service()
-        doc = get_document(doc_id)
-
+        service      = get_docs_service()
+        doc          = get_document(doc_id)
         next_number  = _get_last_issue_number(doc) + 1
         body_content = doc.get("body", {}).get("content", [])
         last_element = body_content[-1] if body_content else None
@@ -109,8 +139,7 @@ def create_issue(title, description, issue_type="issue", module=None, note=None,
         priority_str = (priority or "medium").upper()
         status_str   = (status or "open").upper().replace("_", " ")
 
-        # Observations block
-        obs_text = ""
+        obs_text  = ""
         if observations:
             obs_lines = "\n".join([f"   • {o}" for o in observations])
             obs_text  = f"\nObservations:\n{obs_lines}"
@@ -139,109 +168,117 @@ def create_issue(title, description, issue_type="issue", module=None, note=None,
     except Exception as e:
         return {"error": str(e)}
 
+
 def update_issue(issue_number, new_description, doc_id=None):
     if not doc_id:
         return {"error": "No Google Doc ID provided"}
     try:
-        service = get_docs_service()
-        doc = get_document(doc_id)
+        service      = get_docs_service()
+        doc          = get_document(doc_id)
         range_result = _find_issue_range(doc, issue_number)
         if not range_result:
             return {"error": f"Issue #{issue_number} not found"}
-        
+
         _, end_index = range_result
-        
-        # end_index pe newline ho sakta hai — usse ek peeche karo
-        insert_at = end_index - 1
+        insert_at    = end_index - 1
         if insert_at < 1:
             insert_at = 1
-            
+
         service.documents().batchUpdate(
             documentId=doc_id,
-            body={"requests": [{
-                "insertText": {
-                    "location": {"index": insert_at},
-                    "text": f"\n   UPDATE: {new_description}"  # ← newline pehle, baad mein text
-                }
-            }]}
+            body={"requests": [{"insertText": {
+                "location": {"index": insert_at},
+                "text": f"\n   UPDATE: {new_description}"
+            }}]}
         ).execute()
         return {"issue_number": issue_number, "action": "updated"}
     except Exception as e:
         return {"error": str(e)}
 
 
-def resolve_issue(issue_number, doc_id=None):
+def update_issue_status(issue_number, new_status, doc_id=None):
+    """Sirf status change karo — issue delete mat karo."""
     if not doc_id:
         return {"error": "No Google Doc ID provided"}
     try:
         service = get_docs_service()
-        doc = get_document(doc_id)
+        doc     = get_document(doc_id)
+
+        start_index, end_index = _find_status_position(doc, issue_number)
+        if start_index is None or end_index is None:
+            return {"error": f"Issue #{issue_number} status not found"}
+
+        service.documents().batchUpdate(
+            documentId=doc_id,
+            body={"requests": [
+                {"deleteContentRange": {"range": {"startIndex": start_index, "endIndex": end_index}}},
+                {"insertText": {"location": {"index": start_index}, "text": f"Status: {new_status.upper()}"}}
+            ]}
+        ).execute()
+
+        return {"issue_number": issue_number, "action": "status_updated", "new_status": new_status}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def resolve_issue(issue_number, doc_id=None):
+    """Status RESOLVED karo — delete nahi karo."""
+    return update_issue_status(issue_number, "RESOLVED", doc_id)
+
+
+def delete_issue(issue_number, doc_id=None):
+    """Issue completely delete karo Google Doc se."""
+    if not doc_id:
+        return {"error": "No Google Doc ID provided"}
+    try:
+        service      = get_docs_service()
+        doc          = get_document(doc_id)
         range_result = _find_issue_range(doc, issue_number)
         if not range_result:
             return {"error": f"Issue #{issue_number} not found"}
 
         start, end = range_result
-        safe_end = end - 1
+        safe_end   = end - 1
         if safe_end <= start:
             safe_end = end
 
-        # Delete the issue
         service.documents().batchUpdate(
             documentId=doc_id,
-            body={"requests": [{
-                "deleteContentRange": {
-                    "range": {
-                        "startIndex": start - 1 if start > 1 else start,
-                        "endIndex": safe_end
-                    }
+            body={"requests": [{"deleteContentRange": {
+                "range": {
+                    "startIndex": start - 1 if start > 1 else start,
+                    "endIndex":   safe_end
                 }
-            }]}
+            }}]}
         ).execute()
 
-        # Renumber remaining issues
         _renumber_issues(doc_id)
-
-        return {"issue_number": issue_number, "action": "resolved"}
+        return {"issue_number": issue_number, "action": "deleted"}
     except Exception as e:
         return {"error": str(e)}
 
 
 def _renumber_issues(doc_id: str):
     try:
-        service = get_docs_service()
-        doc = get_document(doc_id)
-        text = _get_doc_text(doc)
-
-        # Find all issue number positions
+        service  = get_docs_service()
+        doc      = get_document(doc_id)
         requests = []
         new_number = 1
 
         for block in doc.get("body", {}).get("content", []):
-            para = block.get("paragraph", {})
-            full_text = ""
-            start_index = None
-
+            para       = block.get("paragraph", {})
+            full_text  = ""
             for elem in para.get("elements", []):
-                content = elem.get("textRun", {}).get("content", "")
-                if start_index is None:
-                    start_index = elem.get("startIndex", 0)
-                full_text += content
+                full_text += elem.get("textRun", {}).get("content", "")
 
             match = re.match(r"^(\d+)\.", full_text.strip())
             if match:
                 old_number = match.group(1)
-                old_text = f"{old_number}."
-                new_text = f"{new_number}."
-
-                if old_text != new_text:
-                    # Find exact position of the number in this paragraph
+                if old_number != str(new_number):
                     requests.append({
                         "replaceAllText": {
-                            "containsText": {
-                                "text": f"\n{old_number}.",
-                                "matchCase": True
-                            },
-                            "replaceText": f"\n{new_number}."
+                            "containsText": {"text": f"\n{old_number}.", "matchCase": True},
+                            "replaceText":  f"\n{new_number}."
                         }
                     })
                 new_number += 1
@@ -251,9 +288,10 @@ def _renumber_issues(doc_id: str):
                 documentId=doc_id,
                 body={"requests": requests}
             ).execute()
-
     except Exception as e:
         print(f"Renumber error: {e}")
+
+
 def get_all_issues(doc_id=None):
     if not doc_id:
         return []
@@ -262,7 +300,6 @@ def get_all_issues(doc_id=None):
         text = _get_doc_text(doc)
         issues = []
 
-        # Naya format: "Issue #1 [MODULE]" ya "Issue #1"
         pattern = re.compile(
             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
             r"Title:\s*(.+?)\s*\n"
@@ -293,29 +330,48 @@ def get_all_issues(doc_id=None):
         print(f"Doc fetch error: {e}")
         return []
 
-# def get_all_issues(doc_id=None):
-#     if not doc_id:
-#         return []
-#     try:
-#         doc = get_document(doc_id)
-#         text = _get_doc_text(doc)
-#         issues = []
-#         for match in re.finditer(r"(\d+)\.\s+(.+?)(?=\n\d+\.|\Z)", text, re.DOTALL):
-#             number = int(match.group(1))
-#             raw = match.group(2).strip()
-            
-#             # skip if empty after strip
-#             if not raw:
-#                 continue
-                
-#             title = raw.split("\n")[0][:80].strip()
-            
-#             # skip if title is empty
-#             if not title:
-#                 continue
 
-#             issues.append({"number": number, "title": title})
-#         return issues
-#     except Exception as e:
-#         print(f"Doc fetch error: {e}")
-#         return []
+def get_drive_service():
+    creds = None
+    if os.path.exists(TOKEN_PATH):
+        with open(TOKEN_PATH, "rb") as token:
+            creds = pickle.load(token)
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_PATH, SCOPES)
+            creds = flow.run_local_server(port=0)
+        with open(TOKEN_PATH, "wb") as token:
+            pickle.dump(creds, token)
+    return build("drive", "v3", credentials=creds)
+
+
+def search_docs(query: str = "") -> list:
+    try:
+        service = get_drive_service()
+        q = "mimeType='application/vnd.google-apps.document' and trashed=false"
+        if query:
+            q += f" and name contains '{query}'"
+        results = service.files().list(
+            q=q, pageSize=10,
+            fields="files(id, name, modifiedTime, webViewLink)"
+        ).execute()
+        return results.get("files", [])
+    except Exception as e:
+        print(f"Drive search error: {e}")
+        return []
+
+
+def create_new_doc(title: str) -> dict:
+    try:
+        service = get_docs_service()
+        doc     = service.documents().create(body={"title": title}).execute()
+        doc_id  = doc["documentId"]
+        return {
+            "id":          doc_id,
+            "name":        title,
+            "webViewLink": f"https://docs.google.com/document/d/{doc_id}/edit"
+        }
+    except Exception as e:
+        return {"error": str(e)}
