@@ -85,10 +85,10 @@ const MEMBERS: Member[] = [
 ];
 
 const ORG_STATS = [
-  { label: "Founded",          value: "2024",              icon: Building2,  color: "#E53E3E" },
-  { label: "Team Size",        value: "Growing Team",      icon: Users,      color: "#3B82F6" },
-  { label: "Revenue Focus",    value: "B2B / B2C",         icon: TrendingUp, color: "#22C55E" },
-  { label: "Payroll",          value: "In-house Managed",  icon: DollarSign, color: "#A855F7" },
+  { label: "Founded", value: "2024", icon: Building2, color: "#E53E3E" },
+  { label: "Team Size", value: "Growing Team", icon: Users, color: "#3B82F6" },
+  { label: "Revenue Focus", value: "B2B / B2C", icon: TrendingUp, color: "#22C55E" },
+  { label: "Payroll", value: "In-house Managed", icon: DollarSign, color: "#A855F7" },
 ];
 
 const KPIS: KPI[] = [
@@ -281,8 +281,8 @@ function MemberCard({ member }: { member: Member }) {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {[
-                { icon: Mail,     value: member.email,    href: `mailto:${member.email}` },
-                { icon: Phone,    value: member.phone,    href: `tel:${member.phone}` },
+                { icon: Mail, value: member.email, href: `mailto:${member.email}` },
+                { icon: Phone, value: member.phone, href: `tel:${member.phone}` },
                 { icon: Linkedin, value: member.linkedin, href: member.linkedin },
               ].map(({ icon: Icon, value, href }) => (
                 <a key={href} href={href} target="_blank" rel="noreferrer"
@@ -394,108 +394,108 @@ export default function EmployerPage() {
         }
       `}</style>
       <div className="page-container">
-      {/* ── Header ── */}
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Employer</h1>
-          <p className="page-subtitle">Executive leadership and company principals</p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 12, color: "var(--text-muted)" }}>
-          <Building2 size={13} />
-          makewithus Pvt Ltd
-        </div>
-      </div>
-
-      {/* ── Company Overview Cards ── */}
-      <div className="emp-org-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
-        {ORG_STATS.map((s) => (
-          <div key={s.label} className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden" }}>
-            <div style={{
-              position: "absolute", bottom: -12, right: -12,
-              width: 60, height: 60, borderRadius: "50%",
-              background: `${s.color}12`, filter: "blur(12px)", pointerEvents: "none",
-            }} />
-            <div style={{ width: 40, height: 40, borderRadius: 10, background: `${s.color}18`, border: `1px solid ${s.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <s.icon size={17} color={s.color} />
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{s.label}</div>
-            </div>
+        {/* ── Header ── */}
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Employer</h1>
+            <p className="page-subtitle">Executive leadership and company principals</p>
           </div>
-        ))}
-      </div>
-
-      {/* ── Executive Leadership ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-        <Crown size={15} color="var(--brand-red)" />
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>
-          Executive Leadership Team
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 12, color: "var(--text-muted)" }}>
+            <Building2 size={13} />
+            makewithus Pvt Ltd
+          </div>
         </div>
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-      </div>
 
-      <div className="emp-member-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 36 }}>
-        {MEMBERS.map((m) => <MemberCard key={m.id} member={m} />)}
-      </div>
-
-      {/* ── KPI Section ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-        <BarChart3 size={15} color="var(--brand-red)" />
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>
-          Company KPIs
-        </div>
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        <div style={{ fontSize: 11, color: "var(--text-muted)", padding: "3px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 99 }}>
-          FY 2024–25
-        </div>
-      </div>
-
-      <div className="emp-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 36 }}>
-        {KPIS.map((k) => <KPICard key={k.label} kpi={k} />)}
-      </div>
-
-      {/* ── Company Vision Block ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-        <Target size={15} color="var(--brand-red)" />
-        <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>
-          Vision &amp; Mission
-        </div>
-        <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-      </div>
-
-      <div className="card" style={{ padding: 28 }}>
-        <div className="emp-vision-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-          {[
-            {
-              icon: Award,
-              title: "Vision",
-              color: "#E53E3E",
-              desc: "To be the most trusted partner for businesses seeking technology-driven growth, building sustainable impact across industries.",
-            },
-            {
-              icon: Target,
-              title: "Mission",
-              color: "#3B82F6",
-              desc: "Empowering teams through innovative tools, transparent processes, and people-first leadership that unlocks every individual's potential.",
-            },
-            {
-              icon: Globe,
-              title: "Values",
-              color: "#22C55E",
-              desc: "Integrity, Innovation, Ownership, and Excellence — the four pillars that guide every decision from the executive level down.",
-            },
-          ].map((v) => (
-            <div key={v.title} style={{ padding: 18, background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", borderTop: `3px solid ${v.color}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <v.icon size={14} color={v.color} />
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>{v.title}</div>
+        {/* ── Company Overview Cards ── */}
+        <div className="emp-org-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
+          {ORG_STATS.map((s) => (
+            <div key={s.label} className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden" }}>
+              <div style={{
+                position: "absolute", bottom: -12, right: -12,
+                width: 60, height: 60, borderRadius: "50%",
+                background: `${s.color}12`, filter: "blur(12px)", pointerEvents: "none",
+              }} />
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${s.color}18`, border: `1px solid ${s.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <s.icon size={17} color={s.color} />
               </div>
-              <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7, margin: 0 }}>{v.desc}</p>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>{s.value}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{s.label}</div>
+              </div>
             </div>
           ))}
         </div>
-      </div>
+
+        {/* ── Executive Leadership ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+          <Crown size={15} color="var(--brand-red)" />
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>
+            Executive Leadership Team
+          </div>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+        </div>
+
+        <div className="emp-member-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 36 }}>
+          {MEMBERS.map((m) => <MemberCard key={m.id} member={m} />)}
+        </div>
+
+        {/* ── KPI Section ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+          <BarChart3 size={15} color="var(--brand-red)" />
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>
+            Company KPIs
+          </div>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          <div style={{ fontSize: 11, color: "var(--text-muted)", padding: "3px 10px", background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 99 }}>
+            FY 2024–25
+          </div>
+        </div>
+
+        <div className="emp-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 36 }}>
+          {KPIS.map((k) => <KPICard key={k.label} kpi={k} />)}
+        </div>
+
+        {/* ── Company Vision Block ── */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+          <Target size={15} color="var(--brand-red)" />
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>
+            Vision &amp; Mission
+          </div>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+        </div>
+
+        <div className="card" style={{ padding: 28 }}>
+          <div className="emp-vision-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+            {[
+              {
+                icon: Award,
+                title: "Vision",
+                color: "#E53E3E",
+                desc: "To be the most trusted partner for businesses seeking technology-driven growth, building sustainable impact across industries.",
+              },
+              {
+                icon: Target,
+                title: "Mission",
+                color: "#3B82F6",
+                desc: "Empowering teams through innovative tools, transparent processes, and people-first leadership that unlocks every individual's potential.",
+              },
+              {
+                icon: Globe,
+                title: "Values",
+                color: "#22C55E",
+                desc: "Integrity, Innovation, Ownership, and Excellence — the four pillars that guide every decision from the executive level down.",
+              },
+            ].map((v) => (
+              <div key={v.title} style={{ padding: 18, background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", borderTop: `3px solid ${v.color}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <v.icon size={14} color={v.color} />
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>{v.title}</div>
+                </div>
+                <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.7, margin: 0 }}>{v.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </>
   );

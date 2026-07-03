@@ -242,8 +242,8 @@ export default function EmployeeDashboard() {
         }
         clockIn();
         toast.success("Clocked in successfully!");
-      } catch {
-        toast.error("Clock-in failed.");
+      } catch (e: any) {
+        toast.error(e.message || "Clock-in failed.");
       } finally {
         setClocking(false);
       }

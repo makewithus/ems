@@ -1,6 +1,9 @@
 "use client";
 import { useState, useMemo } from "react";
-import { Clock, Play, Square, Coffee, ChevronDown, Loader2, CalendarDays, Eye } from "lucide-react";
+import {
+  Clock, Play, Square, Coffee, ChevronDown, Loader2,
+  CalendarDays, Eye, LayoutDashboard, PenLine,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { useAttendanceStore } from "@/store/attendance.store";
@@ -15,6 +18,7 @@ import {
   recordBreakEnd,
 } from "@/hooks/useAttendance";
 import AttendanceCalendarModal from "@/components/attendance/AttendanceCalendarModal";
+import ManualAttendancePanel from "@/components/attendance/ManualAttendancePanel";
 
 const statusBadge: Record<string, { bg: string; color: string }> = {
   Present:    { bg: "var(--accent-green-dim)",  color: "var(--accent-green)" },
@@ -32,11 +36,14 @@ function fmt24to12(t: string): string {
   return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
 }
 
+type AdminTab = "overview" | "manual";
+
 export default function AttendancePage() {
   const { role, profile, user } = useAuthStore();
   const isAdmin = role === "super_admin" || role === "hr_admin";
   const { clockIn, clockOut, continueWork } = useAttendanceStore();
 
+  const [adminTab, setAdminTab] = useState<AdminTab>("overview");
   const [dept, setDept] = useState("All");
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -91,8 +98,8 @@ export default function AttendancePage() {
       }
       clockIn();
       toast.success("Clocked in successfully!");
-    } catch {
-      toast.error("Clock-in failed. Try again.");
+    } catch (e: any) {
+      toast.error(e.message || "Clock-in failed. Try again.");
     } finally {
       setClocking(false);
     }
@@ -175,197 +182,234 @@ export default function AttendancePage() {
         />
       )}
 
-      {/* Employee Clock Widget */}
+      {/* ── Employee View ── */}
       {!isAdmin && (
-        <div className="card" style={{ padding: 24, maxWidth: 520, marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 20 }}>Today&apos;s Attendance</div>
+        <>
+          <div className="card" style={{ padding: 24, maxWidth: 520, marginBottom: 24 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 20 }}>Today&apos;s Attendance</div>
 
-          {empLoading ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13, marginBottom: 20 }}>
-              <Loader2 size={15} className="animate-spin" /> Loading…
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-              {[
-                { label: "Clock In",    value: todayRecord?.clockIn    ? fmt24to12(todayRecord.clockIn)    : "—", color: hasClockedIn  ? "var(--accent-green)" : "var(--text-muted)" },
-                { label: "Clock Out",   value: todayRecord?.clockOut   ? fmt24to12(todayRecord.clockOut)   : "—", color: hasClockedOut ? "var(--accent-blue)"  : "var(--text-muted)" },
-                { label: "Break Start", value: todayRecord?.breakStart ? fmt24to12(todayRecord.breakStart) : "—", color: hasBreakStart ? "var(--accent-amber)" : "var(--text-muted)" },
-                { label: "Break End",   value: todayRecord?.breakEnd   ? fmt24to12(todayRecord.breakEnd)   : "—", color: hasBreakEnd   ? "var(--accent-amber)" : "var(--text-muted)" },
-              ].map((i) => (
-                <div key={i.label} style={{ padding: "14px 16px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>{i.label}</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: i.color }}>{i.value}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {!hasClockedIn ? (
-              <button id="att-clockin" onClick={handleClockIn} disabled={clocking || empLoading} className="btn btn-primary" style={{ gap: 6 }}>
-                {clocking ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Clock In
-              </button>
-            ) : !hasClockedOut ? (
-              <button id="att-clockout" onClick={handleClockOut} disabled={clocking} className="btn btn-secondary" style={{ gap: 6 }}>
-                {clocking ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />} Clock Out
-              </button>
+            {empLoading ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13, marginBottom: 20 }}>
+                <Loader2 size={15} className="animate-spin" /> Loading…
+              </div>
             ) : (
-              <button id="att-continue" onClick={() => { continueWork(); toast.success("Resumed working"); }} className="btn btn-primary" style={{ gap: 6 }}>
-                <Play size={14} /> Continue Work
-              </button>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                {[
+                  { label: "Clock In",    value: todayRecord?.clockIn    ? fmt24to12(todayRecord.clockIn)    : "—", color: hasClockedIn  ? "var(--accent-green)" : "var(--text-muted)" },
+                  { label: "Clock Out",   value: todayRecord?.clockOut   ? fmt24to12(todayRecord.clockOut)   : "—", color: hasClockedOut ? "var(--accent-blue)"  : "var(--text-muted)" },
+                  { label: "Break Start", value: todayRecord?.breakStart ? fmt24to12(todayRecord.breakStart) : "—", color: hasBreakStart ? "var(--accent-amber)" : "var(--text-muted)" },
+                  { label: "Break End",   value: todayRecord?.breakEnd   ? fmt24to12(todayRecord.breakEnd)   : "—", color: hasBreakEnd   ? "var(--accent-amber)" : "var(--text-muted)" },
+                ].map((i) => (
+                  <div key={i.label} style={{ padding: "14px 16px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>{i.label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: i.color }}>{i.value}</div>
+                  </div>
+                ))}
+              </div>
             )}
 
-            {hasClockedIn && !hasClockedOut && (
-              isOnBreak ? (
-                <button id="att-break-end" className="btn btn-secondary" style={{ gap: 6 }} disabled={breaking} onClick={handleBreakEnd}>
-                  {breaking ? <Loader2 size={14} className="animate-spin" /> : <Coffee size={14} />} End Break
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {!hasClockedIn ? (
+                <button id="att-clockin" onClick={handleClockIn} disabled={clocking || empLoading} className="btn btn-primary" style={{ gap: 6 }}>
+                  {clocking ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Clock In
+                </button>
+              ) : !hasClockedOut ? (
+                <button id="att-clockout" onClick={handleClockOut} disabled={clocking} className="btn btn-secondary" style={{ gap: 6 }}>
+                  {clocking ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />} Clock Out
                 </button>
               ) : (
-                <button id="att-break-start" className="btn btn-secondary" style={{ gap: 6 }} disabled={breaking} onClick={handleBreakStart}>
-                  {breaking ? <Loader2 size={14} className="animate-spin" /> : <Coffee size={14} />} Start Break
+                <button id="att-continue" onClick={() => { continueWork(); toast.success("Resumed working"); }} className="btn btn-primary" style={{ gap: 6 }}>
+                  <Play size={14} /> Continue Work
                 </button>
-              )
+              )}
+
+              {hasClockedIn && !hasClockedOut && (
+                isOnBreak ? (
+                  <button id="att-break-end" className="btn btn-secondary" style={{ gap: 6 }} disabled={breaking} onClick={handleBreakEnd}>
+                    {breaking ? <Loader2 size={14} className="animate-spin" /> : <Coffee size={14} />} End Break
+                  </button>
+                ) : (
+                  <button id="att-break-start" className="btn btn-secondary" style={{ gap: 6 }} disabled={breaking} onClick={handleBreakStart}>
+                    {breaking ? <Loader2 size={14} className="animate-spin" /> : <Coffee size={14} />} Start Break
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Recent Attendance</div>
+            {empLoading ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13 }}>
+                <Loader2 size={15} className="animate-spin" /> Loading…
+              </div>
+            ) : empRecords.length === 0 ? (
+              <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "20px 0" }}>No attendance records yet.</div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th><th>Clock In</th><th>Clock Out</th><th>Break</th><th>Hours</th><th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {empRecords.slice(0, 30).map((r) => (
+                      <tr key={r.id}>
+                        <td style={{ fontSize: 13 }}>{r.date ? formatDate(r.date) : "—"}</td>
+                        <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                            <Clock size={12} />{r.clockIn ? fmt24to12(r.clockIn) : "—"}
+                          </div>
+                        </td>
+                        <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
+                        <td style={{ fontSize: 13, color: "var(--accent-amber)" }}>
+                          {r.breakStart ? fmt24to12(r.breakStart) : "—"}
+                          {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
+                        </td>
+                        <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
+                        <td>
+                          <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
+                            {r.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
-        </div>
+        </>
       )}
 
-      {/* Employee: recent attendance */}
-      {!isAdmin && (
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Recent Attendance</div>
-          {empLoading ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-muted)", fontSize: 13 }}>
-              <Loader2 size={15} className="animate-spin" /> Loading…
-            </div>
-          ) : empRecords.length === 0 ? (
-            <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "20px 0" }}>No attendance records yet.</div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th><th>Clock In</th><th>Clock Out</th><th>Break</th><th>Hours</th><th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {empRecords.slice(0, 30).map((r) => (
-                    <tr key={r.id}>
-                      <td style={{ fontSize: 13 }}>{r.date ? formatDate(r.date) : "—"}</td>
-                      <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <Clock size={12} />{r.clockIn ? fmt24to12(r.clockIn) : "—"}
-                        </div>
-                      </td>
-                      <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
-                      <td style={{ fontSize: 13, color: "var(--accent-amber)" }}>
-                        {r.breakStart ? fmt24to12(r.breakStart) : "—"}
-                        {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
-                      </td>
-                      <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
-                      <td>
-                        <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
-                          {r.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Admin: Daily table */}
+      {/* ── Admin View ── */}
       {isAdmin && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
-            {[
-              { label: "Present",  value: stats.Present,     color: "var(--accent-green)" },
-              { label: "Absent",   value: stats.Absent,      color: "var(--accent-red)" },
-              { label: "Late",     value: stats.Late,        color: "var(--accent-amber)" },
-              { label: "Half Day", value: stats["Half Day"], color: "var(--accent-purple)" },
-            ].map((s) => (
-              <div key={s.label} className="card" style={{ padding: "14px 18px" }}>
-                <div style={{ fontSize: 24, fontWeight: 700, color: s.color, marginBottom: 4 }}>{s.value}</div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.label}</div>
-              </div>
+          {/* Tab bar */}
+          <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)", marginBottom: 22 }}>
+            {([
+              { id: "overview", label: "Daily Overview", icon: LayoutDashboard },
+              { id: "manual",   label: "Manual Marking",  icon: PenLine },
+            ] as { id: AdminTab; label: string; icon: React.ElementType }[]).map((t) => (
+              <button
+                key={t.id}
+                id={`att-tab-${t.id}`}
+                onClick={() => setAdminTab(t.id)}
+                style={{
+                  padding: "10px 18px", background: "none", border: "none", cursor: "pointer",
+                  fontSize: 13, fontWeight: adminTab === t.id ? 600 : 400,
+                  color: adminTab === t.id ? "var(--brand-red)" : "var(--text-secondary)",
+                  borderBottom: `2px solid ${adminTab === t.id ? "var(--brand-red)" : "transparent"}`,
+                  marginBottom: -1, whiteSpace: "nowrap",
+                  display: "flex", alignItems: "center", gap: 6,
+                  transition: "color 0.15s",
+                }}
+              >
+                <t.icon size={14} /> {t.label}
+              </button>
             ))}
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-            <div style={{ position: "relative" }}>
-              <select id="att-filter-dept" className="input-base" style={{ paddingRight: 32, appearance: "none", minWidth: 160 }} value={dept} onChange={(e) => setDept(e.target.value)}>
-                <option value="All">All Departments</option>
-                {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-              <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
-            </div>
-            <input id="att-filter-date" type="date" className="input-base" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={{ width: "auto" }} />
-          </div>
+          {/* ── Daily Overview Tab ── */}
+          {adminTab === "overview" && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+                {[
+                  { label: "Present",  value: stats.Present,     color: "var(--accent-green)" },
+                  { label: "Absent",   value: stats.Absent,      color: "var(--accent-red)" },
+                  { label: "Late",     value: stats.Late,        color: "var(--accent-amber)" },
+                  { label: "Half Day", value: stats["Half Day"], color: "var(--accent-purple)" },
+                ].map((s) => (
+                  <div key={s.label} className="card" style={{ padding: "14px 18px" }}>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: s.color, marginBottom: 4 }}>{s.value}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
 
-          {adminLoading ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 0", color: "var(--text-muted)", gap: 10 }}>
-              <Loader2 size={18} className="animate-spin" />
-              <span style={{ fontSize: 13 }}>Loading attendance…</span>
-            </div>
-          ) : filteredAdmin.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)" }}>
-              <Clock size={36} style={{ margin: "0 auto 12px", opacity: 0.3 }} />
-              <p style={{ fontSize: 14 }}>No attendance records for {formatDate(selectedDate)}</p>
-              <p style={{ fontSize: 12, marginTop: 6 }}>Records appear here once employees clock in.</p>
-            </div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Employee</th><th>Department</th><th>Clock In</th><th>Clock Out</th><th>Break</th><th>Hours</th><th>Status</th><th>Quick Glance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAdmin.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--accent-blue-dim)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--accent-blue)" }}>
-                            {r.employeeName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 500, fontSize: 13 }}>{r.employeeName}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{r.employeeId}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{r.department || "—"}</td>
-                      <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <Clock size={12} />{r.clockIn ? fmt24to12(r.clockIn) : "—"}
-                        </div>
-                      </td>
-                      <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
-                      <td style={{ fontSize: 13, color: "var(--accent-amber)" }}>
-                        {r.breakStart ? fmt24to12(r.breakStart) : "—"}
-                        {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
-                      </td>
-                      <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
-                      <td>
-                        <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td>
-                        <button className="btn btn-secondary" style={{ padding: "5px 10px", fontSize: 11, gap: 4 }} onClick={() => setQuickGlance({ employeeId: r.employeeId, employeeName: r.employeeName })}>
-                          <Eye size={12} /> Glance
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+              <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                <div style={{ position: "relative" }}>
+                  <select id="att-filter-dept" className="input-base" style={{ paddingRight: 32, appearance: "none", minWidth: 160 }} value={dept} onChange={(e) => setDept(e.target.value)}>
+                    <option value="All">All Departments</option>
+                    {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <ChevronDown size={13} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", pointerEvents: "none" }} />
+                </div>
+                <input id="att-filter-date" type="date" className="input-base" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} style={{ width: "auto" }} />
+              </div>
+
+              {adminLoading ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 0", color: "var(--text-muted)", gap: 10 }}>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span style={{ fontSize: 13 }}>Loading attendance…</span>
+                </div>
+              ) : filteredAdmin.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 0", color: "var(--text-muted)" }}>
+                  <Clock size={36} style={{ margin: "0 auto 12px", opacity: 0.3 }} />
+                  <p style={{ fontSize: 14 }}>No attendance records for {formatDate(selectedDate)}</p>
+                  <p style={{ fontSize: 12, marginTop: 6 }}>Records appear here once employees clock in.</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Employee</th><th>Department</th><th>Clock In</th><th>Clock Out</th><th>Break</th><th>Hours</th><th>Status</th><th>Quick Glance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAdmin.map((r) => (
+                        <tr key={r.id}>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--accent-blue-dim)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--accent-blue)" }}>
+                                {r.employeeName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 500, fontSize: 13 }}>{r.employeeName}</div>
+                                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{r.employeeId}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{r.department || "—"}</td>
+                          <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <Clock size={12} />{r.clockIn ? fmt24to12(r.clockIn) : "—"}
+                            </div>
+                          </td>
+                          <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
+                          <td style={{ fontSize: 13, color: "var(--accent-amber)" }}>
+                            {r.breakStart ? fmt24to12(r.breakStart) : "—"}
+                            {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
+                          </td>
+                          <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
+                                {r.status}
+                              </span>
+                              {r.manuallyMarked && (
+                                <span title="Manually marked" style={{ fontSize: 9, background: "var(--accent-blue-dim)", color: "var(--accent-blue)", padding: "2px 6px", borderRadius: 99, fontWeight: 700, letterSpacing: "0.04em" }}>MANUAL</span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <button className="btn btn-secondary" style={{ padding: "5px 10px", fontSize: 11, gap: 4 }} onClick={() => setQuickGlance({ employeeId: r.employeeId, employeeName: r.employeeName })}>
+                              <Eye size={12} /> Glance
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
+
+          {/* ── Manual Marking Tab ── */}
+          {adminTab === "manual" && <ManualAttendancePanel />}
         </>
       )}
     </div>

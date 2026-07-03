@@ -18,6 +18,8 @@ export type AttendanceRecord = {
   breakEnd: string; // HH:MM or ""
   status: "Present" | "Absent" | "Late" | "Half Day" | "Holiday" | "Weekend";
   hoursWorked: string;
+  manuallyMarked?: boolean;
+  notes?: string;
 };
 
 /** Admin: real-time attendance list for a given date */
@@ -49,6 +51,8 @@ export function useAttendanceByDate(date: string) {
             breakEnd: data.breakEnd ?? "",
             status: data.status ?? "Absent",
             hoursWorked: data.hoursWorked ?? "—",
+            manuallyMarked: data.manuallyMarked ?? false,
+            notes: data.notes ?? "",
           };
         });
         // Sort by employee name in-memory
@@ -97,6 +101,8 @@ export function useEmployeeAttendance(employeeId: string) {
             breakEnd: data.breakEnd ?? "",
             status: data.status ?? "Absent",
             hoursWorked: data.hoursWorked ?? "—",
+            manuallyMarked: data.manuallyMarked ?? false,
+            notes: data.notes ?? "",
           };
         });
         // Sort by date descending in-memory
@@ -237,4 +243,38 @@ export async function recordBreakEnd(employeeId: string) {
     { merge: true }
   );
   return timeStr;
+}
+
+/** Admin: manually mark or overwrite attendance for any employee on any date */
+export async function manualMarkAttendance(
+  employeeId: string,
+  employeeName: string,
+  department: string,
+  date: string, // YYYY-MM-DD
+  status: AttendanceRecord["status"],
+  notes?: string
+) {
+  const docId = `${employeeId}_${date}`;
+  await setDoc(
+    doc(db, "attendance", docId),
+    {
+      employeeId,
+      employeeName,
+      department,
+      date,
+      status,
+      notes: notes ?? "",
+      manuallyMarked: true,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/** Admin: delete ALL attendance records for a given employeeId */
+export async function clearEmployeeAttendance(employeeId: string): Promise<number> {
+  const { getDocs, deleteDoc: del, query: q, collection: col, where: w } = await import("firebase/firestore");
+  const snap = await getDocs(q(col(db, "attendance"), w("employeeId", "==", employeeId)));
+  await Promise.all(snap.docs.map(d => del(d.ref)));
+  return snap.docs.length;
 }
