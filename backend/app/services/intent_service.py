@@ -105,7 +105,6 @@ def build_user_prompt(request: IntentRequest) -> str:
 
     return prompt
 
-
 def call_ai(prompt: str) -> str:
     response = requests.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -113,48 +112,176 @@ def call_ai(prompt: str) -> str:
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json"
         },
-#         json={
-#     "model": "google/gemini-2.5-pro",
-#     "max_tokens": 300,
+        json={
+            "model": "google/gemma-3-4b-it:free",
+
+            "max_tokens": 1024,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ]
+        }
+    )
+
+    data = response.json()
+    print("OpenRouter response:", data)
+
+    if "error" in data:
+        raise Exception(f"OpenRouter error: {data['error']}")
+
+    if "choices" not in data:
+        raise Exception(f"Unexpected response: {data}")
+
+    # None check karo
+    content = data["choices"][0]["message"].get("content")
+    if not content:
+        raise Exception("Model returned empty response")
+
+    return content
+# def call_ai(prompt: str) -> str:
+#     response = requests.post(
+#         "https://openrouter.ai/api/v1/chat/completions",
+#         headers={
+#             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+#             "Content-Type": "application/json"
+#         },
+# #         json={
+# #     "model": "google/gemini-2.5-pro",
+# #     "max_tokens": 300,
+# #     "messages": [
+# #         {"role": "system", "content": SYSTEM_PROMPT},
+# #         {"role": "user", "content": prompt}
+# #     ]
+# # }
+# json={
+#     "model": "poolside/laguna-xs-2.1:free",
+# "max_tokens": 1024,# ← 463 se kam rakho
 #     "messages": [
 #         {"role": "system", "content": SYSTEM_PROMPT},
 #         {"role": "user", "content": prompt}
 #     ]
 # }
-json={
-    "model": "openai/gpt-oss-120b:free",  # ← free model
-    "max_tokens": 400,  # ← 463 se kam rakho
-    "messages": [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt}
-    ]
-}
-    )
+#     )
     
-    data = response.json()
+#     data = response.json()
     
-    # Debug ke liye — ek baar print karo
-    print("OpenRouter response:", data)
+#     # Debug ke liye — ek baar print karo
+#     print("OpenRouter response:", data)
     
-    # Error check
-    if "error" in data:
-        raise Exception(f"OpenRouter error: {data['error']}")
+#     # Error check
+#     if "error" in data:
+#         raise Exception(f"OpenRouter error: {data['error']}")
     
-    if "choices" not in data:
-        raise Exception(f"Unexpected response: {data}")
+#     if "choices" not in data:
+#         raise Exception(f"Unexpected response: {data}")
     
-    return data["choices"][0]["message"]["content"]
+#     return data["choices"][0]["message"]["content"]
+
+# def parse_intent(request: IntentRequest) -> IntentResponse:
+#     try:
+#         raw = call_ai(build_user_prompt(request)).strip()
+
+#         if "```" in raw:
+#             raw = raw.split("```")[1]
+#             if raw.startswith("json"):
+#                 raw = raw[4:]
+
+#         data = json.loads(raw.strip())
+
+#         intent = ParsedIntent(
+#             action=data["action"],
+#             fields=IssueFields(**data.get("fields", {})),
+#             confidence=data.get("confidence", 0.5),
+#             raw_transcript=request.transcript,
+#             confirmation_message=data.get("confirmation_message", ""),
+#             needs_clarification=data.get("needs_clarification", False)
+#         )
+
+#         return IntentResponse(success=True, intent=intent)
+
+#     except json.JSONDecodeError as e:
+#         return IntentResponse(success=False, error=f"JSON parse error: {str(e)}")
+#     except Exception as e:
+#         return IntentResponse(success=False, error=str(e))
+# def parse_intent(request: IntentRequest) -> IntentResponse:
+#     try:
+#         raw = call_ai(build_user_prompt(request)).strip()
+
+#         # Saare possible formats handle karo
+#         if "```json" in raw:
+#             raw = raw.split("```json")[1].split("```")[0]
+#         elif "```" in raw:
+#             raw = raw.split("```")[1]
+#             if raw.startswith("json"):
+#                 raw = raw[4:]
+
+#         raw = raw.strip()
+
+#         # JSON extract karo agar extra text hai
+#         start = raw.find("{")
+#         end   = raw.rfind("}") + 1
+#         if start != -1 and end > start:
+#             raw = raw[start:end]
+
+#         data = json.loads(raw)
+
+#         intent = ParsedIntent(
+#             action=data["action"],
+#             fields=IssueFields(**data.get("fields", {})),
+#             confidence=data.get("confidence", 0.5),
+#             raw_transcript=request.transcript,
+#             confirmation_message=data.get("confirmation_message", ""),
+#             needs_clarification=data.get("needs_clarification", False)
+#         )
+
+#         return IntentResponse(success=True, intent=intent)
+
+#     except json.JSONDecodeError as e:
+#         return IntentResponse(success=False, error=f"JSON parse error: {str(e)}")
+#     except Exception as e:
+#         return IntentResponse(success=False, error=str(e))
 
 def parse_intent(request: IntentRequest) -> IntentResponse:
     try:
-        raw = call_ai(build_user_prompt(request)).strip()
+      
+        raw = call_ai(build_user_prompt(request))
+        
+        if not raw:
+            return IntentResponse(success=False, error="Empty response from AI")
+        
+        raw = raw.strip()
+        # raw = call_ai(build_user_prompt(request)).strip()
 
-        if "```" in raw:
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
+        # # Extract only first JSON object
+        # if "```json" in raw:
+        #     raw = raw.split("```json")[1].split("```")[0]
+        # elif "```" in raw:
+        #     raw = raw.split("```")[1]
+        #     if raw.startswith("json"):
+        #         raw = raw[4:]
 
-        data = json.loads(raw.strip())
+        raw = raw.strip()
+
+        # Sirf pehla valid JSON object lo
+        start = raw.find("{")
+        if start == -1:
+            raise ValueError("No JSON found")
+        
+        # Manually first complete JSON object find karo
+        depth = 0
+        end = start
+        for i, ch in enumerate(raw[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+
+        raw = raw[start:end]
+
+        data = json.loads(raw)
 
         intent = ParsedIntent(
             action=data["action"],
