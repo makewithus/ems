@@ -30,7 +30,7 @@ def get_docs_service():
     return build("docs", "v1", credentials=creds)
 
 
-def get_document(doc_id: str):
+def get_document(doc_id: str):        # ← yeh hona chahiye
     service = get_docs_service()
     return service.documents().get(documentId=doc_id).execute()
 
@@ -291,7 +291,6 @@ def _renumber_issues(doc_id: str):
     except Exception as e:
         print(f"Renumber error: {e}")
 
-
 def get_all_issues(doc_id=None):
     if not doc_id:
         return []
@@ -300,19 +299,30 @@ def get_all_issues(doc_id=None):
         text = _get_doc_text(doc)
         issues = []
 
+        # Naya format: "Issue #4 [MODULE]" or "Issue #4"
         pattern = re.compile(
             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
             r"Title:\s*(.+?)\s*\n"
-            r".*?Status:\s*([\w ]+?)\s+Priority:\s*(\w+)\s+Created On:\s*(.+?)(?=\nIssue #|\Z)",
+            r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)\s{2,}Created On:\s*(.+?)(?=\n─|\nIssue #|\Z)",
             re.DOTALL
         )
+
+        status_map = {
+            "open":        "open",
+            "in progress": "in_progress",
+            "in_progress": "in_progress",
+            "testing":     "testing",
+            "blocked":     "blocked",
+            "resolved":    "resolved",
+            "closed":      "closed",
+        }
 
         for match in pattern.finditer(text):
             number   = int(match.group(1))
             title    = match.group(2).strip()
-            status   = match.group(3).strip().lower().replace(" ", "_")
+            status   = match.group(3).strip().lower()
             priority = match.group(4).strip().lower()
-            created  = match.group(5).strip().split("\n")[0]
+            created  = match.group(5).strip().split("\n")[0].strip()
 
             if not title:
                 continue
@@ -320,15 +330,103 @@ def get_all_issues(doc_id=None):
             issues.append({
                 "number":   number,
                 "title":    title,
-                "status":   status,
+                "status":   status_map.get(status, "open"),
                 "priority": priority,
                 "created":  created,
             })
 
+        print(f"✓ Found {len(issues)} issues")
         return issues
+
     except Exception as e:
         print(f"Doc fetch error: {e}")
         return []
+    
+# def get_all_issues(doc_id=None):
+#     if not doc_id:
+#         return []
+#     try:
+#         doc  = get_document(doc_id)
+#         text = _get_doc_text(doc)
+#         issues = []
+
+#         # Naya format: "Issue #1 [MODULE]"
+#         new_pattern = re.compile(
+#             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
+#             r"Title:\s*(.+?)\s*\n"
+#             r".*?Status:\s*([\w ]+?)\s+Priority:\s*(\w+)\s+Created On:\s*(.+?)(?=\nIssue #|\Z)",
+#             re.DOTALL
+#         )
+#         for match in new_pattern.finditer(text):
+#             number   = int(match.group(1))
+#             title    = match.group(2).strip()
+#             status   = match.group(3).strip().lower().replace(" ", "_")
+#             priority = match.group(4).strip().lower()
+#             created  = match.group(5).strip().split("\n")[0]
+#             if title:
+#                 issues.append({
+#                     "number": number, "title": title,
+#                     "status": status, "priority": priority, "created": created,
+#                 })
+
+#         # Purana format fallback: "1. TITLE\n   ISSUE: desc"
+#         if not issues:
+#             old_pattern = re.compile(
+#                 r"(\d+)\.\s+(.+?)(?=\n\d+\.|\Z)",
+#                 re.DOTALL
+#             )
+#             for match in old_pattern.finditer(text):
+#                 number = int(match.group(1))
+#                 raw    = match.group(2).strip()
+#                 title  = raw.split("\n")[0][:80].strip()
+#                 if title:
+#                     issues.append({
+#                         "number": number, "title": title,
+#                         "status": "open", "priority": "medium", "created": "",
+#                     })
+
+#         return issues
+#     except Exception as e:
+#         print(f"Doc fetch error: {e}")
+#         return []
+
+# def get_all_issues(doc_id=None):
+#     if not doc_id:
+#         return []
+#     try:
+#         doc  = get_document(doc_id)
+#         text = _get_doc_text(doc)
+#         issues = []
+
+#         pattern = re.compile(
+#             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
+#             r"Title:\s*(.+?)\s*\n"
+#             r".*?Status:\s*([\w ]+?)\s+Priority:\s*(\w+)\s+Created On:\s*(.+?)(?=\nIssue #|\Z)",
+#             re.DOTALL
+#         )
+
+#         for match in pattern.finditer(text):
+#             number   = int(match.group(1))
+#             title    = match.group(2).strip()
+#             status   = match.group(3).strip().lower().replace(" ", "_")
+#             priority = match.group(4).strip().lower()
+#             created  = match.group(5).strip().split("\n")[0]
+
+#             if not title:
+#                 continue
+
+#             issues.append({
+#                 "number":   number,
+#                 "title":    title,
+#                 "status":   status,
+#                 "priority": priority,
+#                 "created":  created,
+#             })
+
+#         return issues
+#     except Exception as e:
+#         print(f"Doc fetch error: {e}")
+#         return []
 
 
 def get_drive_service():
