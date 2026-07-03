@@ -1,7 +1,7 @@
 from fastapi import APIRouter
-from ems.backend.app.models.intent import IntentRequest, IntentResponse
-from ems.backend.app.services.intent_service import parse_intent
-from ems.backend.app.services.gdocs_service import get_all_issues
+from app.models.intent import IntentRequest, IntentResponse
+from app.services.intent_service import parse_intent
+from app.services.gdocs_service import get_all_issues
 
 router = APIRouter()
 

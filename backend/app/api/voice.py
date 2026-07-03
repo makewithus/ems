@@ -1,9 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
-from ems.backend.app.services.stt_service import transcribe_with_fallback
-from ems.backend.app.services.intent_service import parse_intent
-from ems.backend.app.models.intent import IntentRequest
-from ems.backend.app.services.gdocs_service import get_all_issues
+from app.services.stt_service import transcribe_with_fallback
+from app.services.intent_service import parse_intent
+from app.models.intent import IntentRequest
+from app.services.gdocs_service import get_all_issues
 
 router = APIRouter()
 

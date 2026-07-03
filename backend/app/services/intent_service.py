@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from dotenv import load_dotenv
-from ems.backend.app.models.intent import (
+from app.models.intent import (
     ParsedIntent,
     IssueFields,
     ActionType,
@@ -113,9 +113,17 @@ def call_ai(prompt: str) -> str:
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json"
         },
-        json={
-    "model": "openai/gpt-4o-mini",
-    "max_tokens": 500,  # ← 1000 se 500 karo
+#         json={
+#     "model": "google/gemini-2.5-pro",
+#     "max_tokens": 300,
+#     "messages": [
+#         {"role": "system", "content": SYSTEM_PROMPT},
+#         {"role": "user", "content": prompt}
+#     ]
+# }
+json={
+    "model": "openai/gpt-oss-120b:free",  # ← free model
+    "max_tokens": 400,  # ← 463 se kam rakho
     "messages": [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": prompt}

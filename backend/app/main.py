@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from ems.backend.app.api.intent import router as intent_router
-from ems.backend.app.api.voice import router as voice_router
-from ems.backend.app.api.actions import router as actions_router
+from app.api.intent import router as intent_router
+from app.api.voice import router as voice_router
+from app.api.actions import router as actions_router
 
 load_dotenv()
 
@@ -12,9 +12,10 @@ app = FastAPI(title="KMJ EMS Voice Automation")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # React frontend
-        "http://localhost:3000",  # Next.js EMS portal ← add karo
+        "http://localhost:5173",
+        "http://localhost:3000",
     ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
