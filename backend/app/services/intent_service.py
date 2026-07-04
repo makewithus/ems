@@ -104,40 +104,91 @@ def build_user_prompt(request: IntentRequest) -> str:
         prompt += f"\n\nExisting issues in doc (for matching):\n{issues_text}"
 
     return prompt
+import time
 
 def call_ai(prompt: str) -> str:
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "google/gemma-3-4b-it:free",
+    models = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "openai/gpt-oss-20b:free",
+        "nvidia/nemotron-3-super:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+    ]
+    
+    for model in models:
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": model,
+                    "max_tokens": 1024,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ]
+                },
+                timeout=30
+            )
 
-            "max_tokens": 1024,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ]
-        }
-    )
+            data = response.json()
+            print(f"Trying model: {model}")
+            print("Response:", data)
 
-    data = response.json()
-    print("OpenRouter response:", data)
+            if "error" in data:
+                print(f"Model {model} failed: {data['error']}")
+                continue
 
-    if "error" in data:
-        raise Exception(f"OpenRouter error: {data['error']}")
+            if "choices" not in data:
+                continue
 
-    if "choices" not in data:
-        raise Exception(f"Unexpected response: {data}")
+            content = data["choices"][0]["message"].get("content")
+            if not content:
+                continue
 
-    # None check karo
-    content = data["choices"][0]["message"].get("content")
-    if not content:
-        raise Exception("Model returned empty response")
+            return content
 
-    return content
+        except Exception as e:
+            print(f"Model {model} exception: {e}")
+            time.sleep(1)
+            continue
+
+    raise Exception("All models failed — please try again")
+
+# def call_ai(prompt: str) -> str:
+#     response = requests.post(
+#         "https://openrouter.ai/api/v1/chat/completions",
+#         headers={
+#             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+#             "Content-Type": "application/json"
+#         },
+#         json={
+#             "model": "meta-llama/llama-3.3-70b-instruct:free",
+# "max_tokens": 1024,
+#             "messages": [
+#                 {"role": "system", "content": SYSTEM_PROMPT},
+#                 {"role": "user", "content": prompt}
+#             ]
+#         }
+#     )
+
+#     data = response.json()
+#     print("OpenRouter response:", data)
+
+#     if "error" in data:
+#         raise Exception(f"OpenRouter error: {data['error']}")
+
+#     if "choices" not in data:
+#         raise Exception(f"Unexpected response: {data}")
+
+#     # None check karo
+#     content = data["choices"][0]["message"].get("content")
+#     if not content:
+#         raise Exception("Model returned empty response")
+
+#     return content
 # def call_ai(prompt: str) -> str:
 #     response = requests.post(
 #         "https://openrouter.ai/api/v1/chat/completions",
@@ -298,3 +349,74 @@ def parse_intent(request: IntentRequest) -> IntentResponse:
         return IntentResponse(success=False, error=f"JSON parse error: {str(e)}")
     except Exception as e:
         return IntentResponse(success=False, error=str(e))
+
+
+# import re as re_module
+
+# def parse_intent(request: IntentRequest) -> IntentResponse:
+#     try:
+#         raw = call_ai(build_user_prompt(request))
+
+#         if not raw:
+#             return IntentResponse(success=False, error="Empty response from AI")
+
+#         raw = raw.strip()
+
+#         # Code blocks remove karo
+#         if "```json" in raw:
+#             raw = raw.split("```json")[1].split("```")[0]
+#         elif "```" in raw:
+#             raw = raw.split("```")[1]
+#             if raw.startswith("json"):
+#                 raw = raw[4:]
+
+#         raw = raw.strip()
+
+#         # Sirf pehla complete JSON object extract karo
+#         start = raw.find("{")
+#         if start == -1:
+#             return IntentResponse(success=False, error="No JSON found in response")
+
+#         depth = 0
+#         end = start
+#         for i, ch in enumerate(raw[start:], start):
+#             if ch == "{":
+#                 depth += 1
+#             elif ch == "}":
+#                 depth -= 1
+#                 if depth == 0:
+#                     end = i + 1
+#                     break
+
+#         raw = raw[start:end]
+
+#         # Common JSON errors fix karo
+#         # Trailing commas remove karo
+#         raw = re_module.sub(r',\s*}', '}', raw)
+#         raw = re_module.sub(r',\s*]', ']', raw)
+#         # Single quotes replace karo
+#         raw = raw.replace("'", '"')
+#         # None/True/False fix karo
+#         raw = raw.replace(': None', ': null')
+#         raw = raw.replace(': True', ': true')
+#         raw = raw.replace(': False', ': false')
+
+#         print("Cleaned JSON:", raw)
+
+#         data = json.loads(raw)
+
+#         intent = ParsedIntent(
+#             action=data["action"],
+#             fields=IssueFields(**data.get("fields", {})),
+#             confidence=data.get("confidence", 0.5),
+#             raw_transcript=request.transcript,
+#             confirmation_message=data.get("confirmation_message", ""),
+#             needs_clarification=data.get("needs_clarification", False)
+#         )
+
+#         return IntentResponse(success=True, intent=intent)
+
+#     except json.JSONDecodeError as e:
+#         return IntentResponse(success=False, error=f"JSON parse error: {str(e)}")
+#     except Exception as e:
+#         return IntentResponse(success=False, error=str(e))
