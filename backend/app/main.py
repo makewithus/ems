@@ -7,13 +7,15 @@ from app.api.actions import router as actions_router
 
 load_dotenv()
 
-app = FastAPI(title="KMJ EMS Voice Automation")
+app = FastAPI(title="Google docs automation")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
+        "https://ems-ashen-eight.vercel.app",  # ← tumhara Vercel URL
+        "https://*.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
