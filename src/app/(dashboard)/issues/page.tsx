@@ -54,7 +54,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; bg: string
 };
 
 const ALL_STATUSES = ["all", "open", "in_progress", "testing", "blocked", "resolved", "closed"];
-
+const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 export default function IssuesPage() {
   const [issues, setIssues]             = useState<Issue[]>([]);
   const [docId, setDocId]               = useState("");
@@ -76,6 +76,7 @@ export default function IssuesPage() {
   const [recentDocs, setRecentDocs]     = useState<{ id: string; url: string }[]>([]);
   const [showRecent, setShowRecent]     = useState(false);
   const recognitionRef                  = useRef<SpeechRecognitionInstance | null>(null);
+
 
   // Load saved doc + recent docs on page open
   useEffect(() => {
@@ -153,7 +154,7 @@ export default function IssuesPage() {
     setFetching(true);
     setIssues([]);
     try {
-      const res  = await fetch(`http://localhost:8000/api/actions/issues?doc_id=${id}`);
+      const res = await fetch(`${API_URL}/api/actions/issues?doc_id=${id}`);
       const data = await res.json();
       if (data.success) setIssues(data.issues);
     } catch { setError("Could not fetch issues."); }
@@ -164,7 +165,7 @@ export default function IssuesPage() {
     if (!text.trim() || !docId) return;
     setLoading(true); setError("");
     try {
-      const res  = await fetch("http://localhost:8000/api/actions/preview", {
+      const res = await fetch(`${API_URL}/api/actions/preview`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcript: text, doc_id: docId }),
       });
@@ -178,7 +179,7 @@ export default function IssuesPage() {
   const handleConfirm = async () => {
     setLoading(true);
     try {
-      const res  = await fetch("http://localhost:8000/api/actions/execute", {
+      const res = await fetch(`${API_URL}/api/actions/execute`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcript: text, doc_id: docId, confirmed: true }),
       });
