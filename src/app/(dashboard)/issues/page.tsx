@@ -75,8 +75,10 @@ export default function IssuesPage() {
   const [searchQuery, setSearchQuery]   = useState("");
   const [recentDocs, setRecentDocs]     = useState<{ id: string; url: string }[]>([]);
   const [showRecent, setShowRecent]     = useState(false);
+  const [activeTabName, setActiveTabName] = useState("");
   const recognitionRef                  = useRef<SpeechRecognitionInstance | null>(null);
-
+  const [savedDocs, setSavedDocs] = useState<{id: string, url: string, name: string}[]>([]);
+const [showDropdown, setShowDropdown] = useState(false);
 
   // Load saved doc + recent docs on page open
   useEffect(() => {
@@ -134,32 +136,72 @@ export default function IssuesPage() {
     const match = url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
     return match ? match[1] : null;
   };
+const connectDoc = async () => {
+  const id = extractDocId(urlInput);
+  if (!id) { setUrlError("Invalid Google Doc URL"); return; }
+  setUrlError("");
 
-  const connectDoc = () => {
-    const id = extractDocId(urlInput);
-    if (!id) { setUrlError("Invalid Google Doc URL"); return; }
-    setUrlError("");
-    setDocId(id); setDocUrl(urlInput); setDocConnected(true);
-    localStorage.setItem("ems_doc_id", id);
-    localStorage.setItem("ems_doc_url", urlInput);
-    const recent  = JSON.parse(localStorage.getItem("ems_recent_docs") || "[]");
-    const updated = [{ id, url: urlInput }, ...recent.filter((d: { id: string; url: string }) => d.id !== id)].slice(0, 5);
-    localStorage.setItem("ems_recent_docs", JSON.stringify(updated));
-    setRecentDocs(updated);
-    setShowRecent(false);
-    fetchIssues(id);
-  };
+  // Doc title fetch karo
+  try {
+    const res = await fetch(`http://localhost:8000/api/actions/doc-title?doc_id=${id}`);
+    const data = await res.json();
+    const name = data.title || `Doc ${savedDocs.length + 1}`;
+    
+    if (!savedDocs.find(d => d.id === id)) {
+      setSavedDocs(prev => [...prev, { id, url: urlInput, name }]);
+    }
+  } catch {
+    if (!savedDocs.find(d => d.id === id)) {
+      setSavedDocs(prev => [...prev, { id, url: urlInput, name: `Doc ${savedDocs.length + 1}` }]);
+    }
+  }
 
+  setDocId(id);
+  setDocUrl(urlInput);
+  setDocConnected(true);
+  fetchIssues(id);
+};
+  // const connectDoc = () => {
+  //   const id = extractDocId(urlInput);
+  //   if (!id) { setUrlError("Invalid Google Doc URL"); return; }
+  //   setUrlError("");
+  //   setDocId(id); setDocUrl(urlInput); setDocConnected(true);
+  //   localStorage.setItem("ems_doc_id", id);
+  //   localStorage.setItem("ems_doc_url", urlInput);
+  //   const recent  = JSON.parse(localStorage.getItem("ems_recent_docs") || "[]");
+  //   const updated = [{ id, url: urlInput }, ...recent.filter((d: { id: string; url: string }) => d.id !== id)].slice(0, 5);
+  //   localStorage.setItem("ems_recent_docs", JSON.stringify(updated));
+  //   setRecentDocs(updated);
+  //   setShowRecent(false);
+  //   fetchIssues(id);
+  // };
+
+  // const fetchIssues = async (id: string) => {
+  //   setFetching(true);
+  //   setIssues([]);
+  //   try {
+  //     const res = await fetch(`${API_URL}/api/actions/issues?doc_id=${id}`);
+  //     const data = await res.json();
+  //     if (data.success) setIssues(data.issues);
+  //   } catch { setError("Could not fetch issues."); }
+  //   finally { setFetching(false); }
+  // };
   const fetchIssues = async (id: string) => {
-    setFetching(true);
-    setIssues([]);
-    try {
-      const res = await fetch(`${API_URL}/api/actions/issues?doc_id=${id}`);
-      const data = await res.json();
-      if (data.success) setIssues(data.issues);
-    } catch { setError("Could not fetch issues."); }
-    finally { setFetching(false); }
-  };
+  setFetching(true);
+  try {
+    const res = await fetch(`http://localhost:8000/api/actions/issues?doc_id=${id}`);
+    const data = await res.json();
+    if (data.success) {
+      setIssues(prev => {
+        const existingNumbers = new Set(prev.map(i => i.number));
+        const newIssues = data.issues.filter((i: Issue) => !existingNumbers.has(i.number));
+        return [...prev, ...newIssues];
+      });
+      if (data.tab_name) setActiveTabName(data.tab_name);
+    }
+  } catch { setError("Could not fetch issues."); }
+  finally { setFetching(false); }
+};
 
   const handleSend = async () => {
     if (!text.trim() || !docId) return;
@@ -215,12 +257,12 @@ export default function IssuesPage() {
       </div>
 
       {/* Google Doc Connector */}
-      <div style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "18px 20px", marginBottom: 24 }}>
+      {/* <div style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "18px 20px", marginBottom: 24 }}>
         <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", margin: "0 0 12px" }}>
           Google Doc Connection
-        </p>
+        </p> */}
 
-        {docConnected ? (
+        {/* {docConnected ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ width: 36, height: 36, borderRadius: 8, background: "#e8f0fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -242,8 +284,8 @@ export default function IssuesPage() {
                 localStorage.removeItem("ems_doc_id"); localStorage.removeItem("ems_doc_url");
               }} style={outlineBtn}>Change</button>
             </div>
-          </div>
-        ) : (
+          </div> */}
+        {/* ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>Paste your Google Doc link to connect:</p>
 
@@ -264,13 +306,13 @@ export default function IssuesPage() {
                   onClick={connectDoc}
                   disabled={!urlInput.trim()}
                   style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: !urlInput.trim() ? "var(--border,#e5e7eb)" : "#4285f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: !urlInput.trim() ? "not-allowed" : "pointer" }}
-                >
-                  Connect
+                > */}
+                  {/* Connect
                 </button>
-              </div>
+              </div> */}
 
               {/* Recent docs dropdown */}
-              {showRecent && recentDocs.length > 0 && (
+              {/* {showRecent && recentDocs.length > 0 && (
                 <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 90, background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.1)", overflow: "hidden" }}>
                   <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", padding: "8px 14px 4px", margin: 0 }}>Recent Docs</p>
                   {recentDocs.map((doc, idx) => (
@@ -294,12 +336,156 @@ export default function IssuesPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </div> */}
 
-            {urlError && <p style={{ color: "#ef4444", fontSize: 12, margin: 0 }}>⚠ {urlError}</p>}
+            {/* {urlError && <p style={{ color: "#ef4444", fontSize: 12, margin: 0 }}>⚠ {urlError}</p>}
           </div>
         )}
+      </div> */}
+      {/* Google Doc Connector */}
+<div style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "18px 20px", marginBottom: 24 }}>
+  <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", margin: "0 0 12px" }}>
+    Google Doc Connection
+  </p>
+
+  {docConnected ? (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+      
+      {/* Active doc highlight */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: "#e8f0fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/><path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        </div>
+        <div>
+          {/* Project name highlighted */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
+              {savedDocs.find(d => d.id === docId)?.name || "Connected Doc"}
+            </p>
+            <span style={{ background: "#f0fdf4", color: "#16a34a", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, border: "1px solid #bbf7d0" }}>✓ Active</span>
+          </div>
+          <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>
+            Open in Google Docs ↗
+          </a>
+        </div>
       </div>
+
+      <div style={{ display: "flex", gap: 8, position: "relative" }}>
+        <button onClick={() => fetchIssues(docId)} style={outlineBtn}>↺ Refresh</button>
+        
+        {/* Switch Project dropdown */}
+        {savedDocs.length > 1 && (
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowDropdown(!showDropdown)}
+              style={{ ...outlineBtn, background: showDropdown ? "#f5f3ff" : undefined, color: showDropdown ? "#6366f1" : undefined }}
+            >
+              Switch Project ▾
+            </button>
+            {showDropdown && (
+              <div style={{
+                position: "absolute", top: "100%", right: 0, marginTop: 4,
+                background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)",
+                borderRadius: 10, zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
+                minWidth: 220, overflow: "hidden"
+              }}>
+                <p style={{ padding: "8px 14px 4px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", margin: 0 }}>
+                  Your Docs
+                </p>
+                {savedDocs.map(doc => (
+                  <div
+                    key={doc.id}
+                    onClick={() => {
+                      setDocId(doc.id);
+                      setDocUrl(doc.url);
+                      setShowDropdown(false);
+                      fetchIssues(doc.id);
+                    }}
+                    style={{
+                      padding: "10px 14px", cursor: "pointer",
+                      display: "flex", alignItems: "center", gap: 10,
+                      background: doc.id === docId ? "#f5f3ff" : "transparent",
+                      borderLeft: doc.id === docId ? "3px solid #6366f1" : "3px solid transparent"
+                    }}
+                    onMouseOver={e => { if (doc.id !== docId) e.currentTarget.style.background = "var(--bg-primary,#f9fafb)"; }}
+                    onMouseOut={e => { if (doc.id !== docId) e.currentTarget.style.background = "transparent"; }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/><path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: doc.id === docId ? 600 : 400, color: doc.id === docId ? "#6366f1" : "var(--text-primary)" }}>
+                        {doc.name}
+                      </p>
+                    </div>
+                    {doc.id === docId && <span style={{ fontSize: 10, color: "#6366f1" }}>Active</span>}
+                  </div>
+                ))}
+                <div style={{ borderTop: "1px solid var(--border,#e5e7eb)", padding: "8px 14px" }}>
+                  <button
+                    onClick={() => { setShowDropdown(false); setDocConnected(false); setDocId(""); setDocUrl(""); setUrlInput(""); }}
+                    style={{ fontSize: 12, color: "#4285f4", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  >
+                    + Add another doc
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        
+        <button
+          onClick={() => { setDocConnected(false); setDocId(""); setDocUrl(""); setUrlInput(""); }}
+          style={outlineBtn}
+        >
+          Change
+        </button>
+      </div>
+    </div>
+  ) : (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+        Paste your Google Doc link to connect:
+      </p>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          placeholder="https://docs.google.com/document/d/..."
+          value={urlInput}
+          onChange={e => { setUrlInput(e.target.value); setUrlError(""); }}
+          onKeyDown={e => e.key === "Enter" && connectDoc()}
+          autoFocus
+          style={{ ...inputStyle, flex: 1 }}
+        />
+        <button
+          onClick={connectDoc}
+          disabled={!urlInput.trim()}
+          style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: !urlInput.trim() ? "var(--border,#e5e7eb)" : "#4285f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: !urlInput.trim() ? "not-allowed" : "pointer" }}
+        >
+          Connect
+        </button>
+      </div>
+      {urlError && <p style={{ color: "#ef4444", fontSize: 12, margin: 0 }}>⚠ {urlError}</p>}
+      
+      {/* Previously connected docs */}
+      {savedDocs.length > 0 && (
+        <div>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "8px 0 6px" }}>Recent docs:</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {savedDocs.map(doc => (
+              <button
+                key={doc.id}
+                onClick={() => { setDocId(doc.id); setDocUrl(doc.url); setDocConnected(true); fetchIssues(doc.id); }}
+                style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid #4285f4", background: "#e8f0fe", color: "#4285f4", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/><path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                {doc.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+</div>
 
       {/* Success banner */}
       {success && (
