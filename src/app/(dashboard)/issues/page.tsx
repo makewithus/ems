@@ -143,7 +143,7 @@ const connectDoc = async () => {
 
   // Doc title fetch karo
   try {
-    const res = await fetch(`http://localhost:8000/api/actions/doc-title?doc_id=${id}`);
+    const res = await fetch(`${API_URL}/api/actions/doc-title?doc_id=${id}`);
     const data = await res.json();
     const name = data.title || `Doc ${savedDocs.length + 1}`;
     
@@ -189,7 +189,7 @@ const connectDoc = async () => {
   const fetchIssues = async (id: string) => {
   setFetching(true);
   try {
-    const res = await fetch(`http://localhost:8000/api/actions/issues?doc_id=${id}`);
+    const res = await fetch(`${API_URL}/api/actions/issues?doc_id=${id}`);
     const data = await res.json();
     if (data.success) {
       setIssues(prev => {

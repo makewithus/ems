@@ -601,19 +601,48 @@ def _get_last_issue_number(doc, tab_id: str = None) -> int:
 #     old_format = re.findall(r"^\s*(\d+)\.", text, re.MULTILINE)
 #     return max([int(n) for n in old_format], default=0)
 
-
 def _find_issue_range(doc, issue_number: int):
     start = None
     end   = None
     index = 1
 
-    for block in doc.get("body", {}).get("content", []):
+    # Tabs support ke saath content lo
+    all_blocks = []
+    
+    # Pehle tabs check karo
+    tabs = doc.get("tabs", [])
+    if tabs:
+        for tab in tabs:
+            tab_props = tab.get("documentTab", {}).get("properties", {})
+            if tab_props.get("title", "").lower() == "issues":
+                body = tab.get("documentTab", {}).get("body", {})
+                all_blocks = body.get("content", [])
+                break
+        if not all_blocks:
+            # Koi bhi tab ka content lo
+            for tab in tabs:
+                body = tab.get("documentTab", {}).get("body", {})
+                content = body.get("content", [])
+                if content:
+                    all_blocks = content
+                    break
+    
+    # Fallback — normal body
+    if not all_blocks:
+        all_blocks = doc.get("body", {}).get("content", [])
+
+    for block in all_blocks:
         para      = block.get("paragraph", {})
         full_text = ""
         for elem in para.get("elements", []):
             full_text += elem.get("textRun", {}).get("content", "")
 
-        new_fmt = re.match(rf"^\s*Issue #{issue_number}(?:\s*\[|$|\s*\n)", full_text)
+        # Naya format: "Issue #1" ya "Issue #1 [MODULE]"
+        new_fmt = re.match(
+            rf"^\s*Issue #{issue_number}(?:\s*\[|\s*\n|$)", 
+            full_text
+        )
+        # Purana format: "1."
         old_fmt = re.match(rf"^\s*{issue_number}\.", full_text)
 
         if new_fmt or old_fmt:
@@ -621,6 +650,8 @@ def _find_issue_range(doc, issue_number: int):
         elif start is not None:
             next_new = re.match(r"^\s*Issue #\d+", full_text)
             next_old = re.match(r"^\s*\d+\.", full_text)
+            # Divider line bhi end mark kare
+            divider  = re.match(r"^\s*─+", full_text)
             if next_new or next_old:
                 end = index
                 break
@@ -632,6 +663,38 @@ def _find_issue_range(doc, issue_number: int):
         end = index
 
     return (start, end) if start else None
+
+
+# def _find_issue_range(doc, issue_number: int):
+#     start = None
+#     end   = None
+#     index = 1
+
+#     for block in doc.get("body", {}).get("content", []):
+#         para      = block.get("paragraph", {})
+#         full_text = ""
+#         for elem in para.get("elements", []):
+#             full_text += elem.get("textRun", {}).get("content", "")
+
+#         new_fmt = re.match(rf"^\s*Issue #{issue_number}(?:\s*\[|$|\s*\n)", full_text)
+#         old_fmt = re.match(rf"^\s*{issue_number}\.", full_text)
+
+#         if new_fmt or old_fmt:
+#             start = index
+#         elif start is not None:
+#             next_new = re.match(r"^\s*Issue #\d+", full_text)
+#             next_old = re.match(r"^\s*\d+\.", full_text)
+#             if next_new or next_old:
+#                 end = index
+#                 break
+
+#         for elem in para.get("elements", []):
+#             index += len(elem.get("textRun", {}).get("content", ""))
+
+#     if start and not end:
+#         end = index
+
+#     return (start, end) if start else None
 
 
 def _find_status_position(doc, issue_number: int):
