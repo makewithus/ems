@@ -35,6 +35,7 @@ class IssueFields(BaseModel):
     priority:      Optional[Priority]   = Priority.MEDIUM
     status:        Optional[IssueStatus] = IssueStatus.OPEN
     note:          Optional[str]        = None
+    observations: Optional[list[str]] = None 
     issue_keyword: Optional[str]        = None
 
 class ParsedIntent(BaseModel):

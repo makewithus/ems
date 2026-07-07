@@ -512,27 +512,94 @@ def get_docs_service():
 def get_drive_service():
     return build("drive", "v3", credentials=get_credentials())
 
-
-def get_document(doc_id: str):
+def get_document(doc_id: str, tab_id: str = None):
     service = get_docs_service()
-    return service.documents().get(documentId=doc_id).execute()
+    if tab_id:
+        return service.documents().get(
+            documentId=doc_id,
+            includeTabsContent=True
+        ).execute()
+    return service.documents().get(
+        documentId=doc_id,
+        includeTabsContent=True
+    ).execute()
+def _get_tab_content(doc, tab_id: str = None):
+    """Specific tab ka content nikalo"""
+    tabs = doc.get("tabs", [])
+    
+    if not tabs:
+        # Old format — no tabs
+        return doc.get("body", {}).get("content", [])
+    
+    if tab_id:
+        # Specific tab dhundo
+        for tab in tabs:
+            doc_tab = tab.get("documentTab", {})
+            tab_props = tab.get("tabProperties", {})
+            if tab_props.get("tabId") == tab_id:
+                return doc_tab.get("body", {}).get("content", [])
+            # Child tabs bhi check karo
+            for child in tab.get("childTabs", []):
+                child_props = child.get("tabProperties", {})
+                if child_props.get("tabId") == tab_id:
+                    return child.get("documentTab", {}).get("body", {}).get("content", [])
+    
+    # Tab ID nahi diya — "issues" naam ka tab dhundo
+    for tab in tabs:
+        tab_props = tab.get("tabProperties", {})
+        tab_title = tab_props.get("title", "").lower()
+        if "issue" in tab_title:
+            return tab.get("documentTab", {}).get("body", {}).get("content", [])
+    
+    # Fallback — pehla tab
+    if tabs:
+        return tabs[0].get("documentTab", {}).get("body", {}).get("content", [])
+    
+    return doc.get("body", {}).get("content", [])
 
-
-def _get_doc_text(doc) -> str:
+def _get_tab_id(doc, tab_name: str = "issues") -> str | None:
+    """Tab name se tab ID nikalo"""
+    tabs = doc.get("tabs", [])
+    for tab in tabs:
+        tab_props = tab.get("tabProperties", {})
+        if tab_name.lower() in tab_props.get("title", "").lower():
+            return tab_props.get("tabId")
+    return None
+# def get_document(doc_id: str):
+#     service = get_docs_service()
+#     return service.documents().get(documentId=doc_id).execute()
+def _get_doc_text(doc, tab_id: str = None) -> str:
+    content = _get_tab_content(doc, tab_id)
     text = ""
-    for block in doc.get("body", {}).get("content", []):
+    for block in content:
         for elem in block.get("paragraph", {}).get("elements", []):
             text += elem.get("textRun", {}).get("content", "")
     return text
 
 
-def _get_last_issue_number(doc) -> int:
-    text = _get_doc_text(doc)
+def _get_last_issue_number(doc, tab_id: str = None) -> int:
+    text = _get_doc_text(doc, tab_id)
     new_format = re.findall(r"Issue #(\d+)", text)
     if new_format:
         return max([int(n) for n in new_format], default=0)
     old_format = re.findall(r"^\s*(\d+)\.", text, re.MULTILINE)
     return max([int(n) for n in old_format], default=0)
+
+# def _get_doc_text(doc) -> str:
+#     text = ""
+#     for block in doc.get("body", {}).get("content", []):
+#         for elem in block.get("paragraph", {}).get("elements", []):
+#             text += elem.get("textRun", {}).get("content", "")
+#     return text
+
+
+# def _get_last_issue_number(doc) -> int:
+#     text = _get_doc_text(doc)
+#     new_format = re.findall(r"Issue #(\d+)", text)
+#     if new_format:
+#         return max([int(n) for n in new_format], default=0)
+#     old_format = re.findall(r"^\s*(\d+)\.", text, re.MULTILINE)
+#     return max([int(n) for n in old_format], default=0)
 
 
 def _find_issue_range(doc, issue_number: int):
@@ -597,32 +664,35 @@ def _find_status_position(doc, issue_number: int):
 
     return start_index, end_index
 
-
 def create_issue(title, description, issue_type="issue", module=None,
                  note=None, doc_id=None, observations=None,
-                 priority="medium", status="open"):
+                 priority="medium", status="open", tab_id: str = None):
     if not doc_id:
         return {"error": "No Google Doc ID provided"}
     try:
         service      = get_docs_service()
         doc          = get_document(doc_id)
-        next_number  = _get_last_issue_number(doc) + 1
-        body_content = doc.get("body", {}).get("content", [])
-        last_element = body_content[-1] if body_content else None
+        
+        # Auto-detect issues tab agar tab_id nahi diya
+        if not tab_id:
+            tab_id = _get_tab_id(doc, "issues")
+        
+        next_number  = _get_last_issue_number(doc, tab_id) + 1
+        content      = _get_tab_content(doc, tab_id)
+        last_element = content[-1] if content else None
         insert_index = last_element.get("endIndex", 1) - 1 if last_element else 1
 
         today        = date.today().strftime("%d %b %Y")
         type_label   = "ISSUE" if issue_type == "issue" else "FEATURE"
         module_tag   = f" [{module.upper()}]" if module else ""
         priority_str = (priority or "medium").upper()
-        status_str   = (status or "open").upper().replace("_", " ")
 
         obs_text = ""
-        if observations:
+        if observations and len(observations) > 0:
             obs_lines = "\n".join([f"   • {o}" for o in observations])
             obs_text  = f"\nObservations:\n{obs_lines}"
 
-        note_text = f"\n   NOTE: {note}" if note else ""
+        note_text = f"\nNote: {note}" if note else ""
 
         new_text = (
             f"\nIssue #{next_number}{module_tag}\n"
@@ -630,24 +700,83 @@ def create_issue(title, description, issue_type="issue", module=None,
             f"Type: {type_label}\n"
             f"Description:\n   {description}"
             f"{obs_text}"
-            f"\nStatus: {status_str}   Priority: {priority_str}   Created On: {today}"
+            f"\nStatus: OPEN   Priority: {priority_str}   Created On: {today}"
             f"{note_text}\n"
             f"{'─' * 50}\n"
         )
 
-        service.documents().batchUpdate(
-            documentId=doc_id,
-            body={"requests": [{"insertText": {
+        request_body = {
+            "insertText": {
                 "location": {"index": insert_index},
                 "text": new_text
-            }}]}
+            }
+        }
+
+        # Tab ID hoga toh location mein add karo
+        if tab_id:
+            request_body["insertText"]["location"]["tabId"] = tab_id
+
+        service.documents().batchUpdate(
+            documentId=doc_id,
+            body={"requests": [request_body]}
         ).execute()
 
-        print(f"✓ Issue #{next_number} added to doc: {doc_id}")
+        print(f"✓ Issue #{next_number} added to tab '{tab_id}' in doc: {doc_id}")
         return {"issue_number": next_number, "title": title, "action": "created"}
 
     except Exception as e:
         return {"error": str(e)}
+    
+# def create_issue(title, description, issue_type="issue", module=None,
+#                  note=None, doc_id=None, observations=None,
+#                  priority="medium", status="open"):
+#     if not doc_id:
+#         return {"error": "No Google Doc ID provided"}
+#     try:
+#         service      = get_docs_service()
+#         doc          = get_document(doc_id)
+#         next_number  = _get_last_issue_number(doc) + 1
+#         body_content = doc.get("body", {}).get("content", [])
+#         last_element = body_content[-1] if body_content else None
+#         insert_index = last_element.get("endIndex", 1) - 1 if last_element else 1
+
+#         today        = date.today().strftime("%d %b %Y")
+#         type_label   = "ISSUE" if issue_type == "issue" else "FEATURE"
+#         module_tag   = f" [{module.upper()}]" if module else ""
+#         priority_str = (priority or "medium").upper()
+#         status_str   = (status or "open").upper().replace("_", " ")
+
+#         obs_text = ""
+#         if observations:
+#             obs_lines = "\n".join([f"   • {o}" for o in observations])
+#             obs_text  = f"\nObservations:\n{obs_lines}"
+
+#         note_text = f"\n   NOTE: {note}" if note else ""
+
+#         new_text = (
+#             f"\nIssue #{next_number}{module_tag}\n"
+#             f"Title: {title}\n"
+#             f"Type: {type_label}\n"
+#             f"Description:\n   {description}"
+#             f"{obs_text}"
+#             f"\nStatus: {status_str}   Priority: {priority_str}   Created On: {today}"
+#             f"{note_text}\n"
+#             f"{'─' * 50}\n"
+#         )
+
+#         service.documents().batchUpdate(
+#             documentId=doc_id,
+#             body={"requests": [{"insertText": {
+#                 "location": {"index": insert_index},
+#                 "text": new_text
+#             }}]}
+#         ).execute()
+
+#         print(f"✓ Issue #{next_number} added to doc: {doc_id}")
+#         return {"issue_number": next_number, "title": title, "action": "created"}
+
+#     except Exception as e:
+#         return {"error": str(e)}
 
 
 def update_issue(issue_number, new_description, doc_id=None):
@@ -770,56 +899,531 @@ def _renumber_issues(doc_id: str):
         print(f"Renumber error: {e}")
 
 
-def get_all_issues(doc_id=None):
+# def get_all_issues(doc_id=None):
+#     if not doc_id:
+#         return []
+#     try:
+#         doc  = get_document(doc_id)
+#         text = _get_doc_text(doc)
+#         issues = []
+
+#         pattern = re.compile(
+#             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
+#             r"Title:\s*(.+?)\s*\n"
+#             r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)\s{2,}Created On:\s*(.+?)(?=\n─|\nIssue #|\Z)",
+#             re.DOTALL
+#         )
+
+#         status_map = {
+#             "open":        "open",
+#             "in progress": "in_progress",
+#             "in_progress": "in_progress",
+#             "testing":     "testing",
+#             "blocked":     "blocked",
+#             "resolved":    "resolved",
+#             "closed":      "closed",
+#         }
+
+#         for match in pattern.finditer(text):
+#             number   = int(match.group(1))
+#             title    = match.group(2).strip()
+#             status   = match.group(3).strip().lower()
+#             priority = match.group(4).strip().lower()
+#             created  = match.group(5).strip().split("\n")[0].strip()
+
+#             if not title:
+#                 continue
+
+#             issues.append({
+#                 "number":   number,
+#                 "title":    title,
+#                 "status":   status_map.get(status, "open"),
+#                 "priority": priority,
+#                 "created":  created,
+#             })
+
+#         print(f"✓ Found {len(issues)} issues")
+#         return issues
+
+#     except Exception as e:
+#         print(f"Doc fetch error: {e}")
+#         return []
+
+
+
+# def get_all_issues(doc_id=None):
+#     if not doc_id:
+#         return []
+#     try:
+#         doc  = get_document(doc_id)
+#         text = _get_doc_text(doc)
+#         print(f"Doc text preview:\n{text[:500]}")
+#         issues = []
+# def get_all_issues(doc_id=None, tab_id: str = None):
+#     if not doc_id:
+#         return []
+#     try:
+#         doc = get_document(doc_id)
+        
+#         # Auto-detect issues tab
+#         if not tab_id:
+#             tab_id = _get_tab_id(doc, "issues")
+        
+#         text = _get_doc_text(doc, tab_id)
+#         print(f"Reading from tab: {tab_id}")
+#         print(f"Doc text preview:\n{text[:300]}")
+#         # ── Format 1: "Issue #5 [MODULE]" naya format ──
+#         pattern1 = re.compile(
+#             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
+#             r"Title:\s*(.+?)\s*\n"
+#             r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)",
+#             re.DOTALL
+#         )
+#         for m in pattern1.finditer(text):
+#             issues.append({
+#                 "number":   int(m.group(1)),
+#                 "title":    m.group(2).strip(),
+#                 "status":   _normalize_status(m.group(3).strip()),
+#                 "priority": m.group(4).strip().lower(),
+#                 "created":  "",
+#             })
+
+#         # ── Format 2: "1. TITLE" purana format ──
+#         if not issues:
+#             pattern2 = re.compile(r"^\s*(\d+)\.\s+(.+?)$", re.MULTILINE)
+#             for m in pattern2.finditer(text):
+#                 title = m.group(2).strip()
+#                 if title and len(title) > 2:
+#                     issues.append({
+#                         "number":   int(m.group(1)),
+#                         "title":    title[:100],
+#                         "status":   "open",
+#                         "priority": "medium",
+#                         "created":  "",
+#                     })
+
+#         # ── Format 3: Heading/bold lines — koi bhi numbered list ──
+#         if not issues:
+#             pattern3 = re.compile(r"(?:^|\n)(\d+)[.)]\s+(.{5,100})", re.MULTILINE)
+#             for m in pattern3.finditer(text):
+#                 title = m.group(2).strip()
+#                 if title:
+#                     issues.append({
+#                         "number":   int(m.group(1)),
+#                         "title":    title[:100],
+#                         "status":   "open",
+#                         "priority": "medium",
+#                         "created":  "",
+#                     })
+
+#         # ── Format 4: "Bug:", "Issue:", "Feature:" prefix wale ──
+#         if not issues:
+#             pattern4 = re.compile(
+#                 r"(?:Bug|Issue|Feature|Task|Problem)[:\s#]*(\d*)[:\s]+(.{5,150})",
+#                 re.IGNORECASE
+#             )
+#             count = 1
+#             for m in pattern4.finditer(text):
+#                 num = int(m.group(1)) if m.group(1) else count
+#                 title = m.group(2).strip()[:100]
+#                 if title:
+#                     issues.append({
+#                         "number":   num,
+#                         "title":    title,
+#                         "status":   "open",
+#                         "priority": "medium",
+#                         "created":  "",
+#                     })
+#                     count += 1
+
+#         # Duplicates remove karo
+#         seen = set()
+#         unique_issues = []
+#         for issue in issues:
+#             if issue["number"] not in seen:
+#                 seen.add(issue["number"])
+#                 unique_issues.append(issue)
+
+#         print(f"✓ Found {len(unique_issues)} issues")
+#         return unique_issues
+
+#     except Exception as e:
+#         print(f"Doc fetch error: {e}")
+#         return []
+
+
+# def _normalize_status(status: str) -> str:
+#     status = status.lower().strip()
+#     mapping = {
+#         "open":        "open",
+#         "in progress": "in_progress",
+#         "in_progress": "in_progress",
+#         "inprogress":  "in_progress",
+#         "testing":     "testing",
+#         "blocked":     "blocked",
+#         "resolved":    "resolved",
+#         "closed":      "closed",
+#         "done":        "resolved",
+#         "fixed":       "resolved",
+#         "complete":    "closed",
+#         "completed":   "closed",
+#     }
+#     return mapping.get(status, "open")
+
+
+# def get_all_issues(doc_id=None, tab_id: str = None):
+#     if not doc_id:
+#         return []
+#     try:
+#         doc = get_document(doc_id)
+#         all_text = ""
+#         tabs = doc.get("tabs", [])
+
+#         if tabs:
+#             target_tab = None
+
+#             # 1. Pehle "ISSUES" naam ka tab dhundo
+#             for tab in tabs:
+#                 props = tab.get("tabProperties", {})
+#                 title = props.get("title", "").strip().lower()
+#                 if title == "issues" or title == "issue":
+#                     target_tab = tab
+#                     break
+
+#             # 2. tab_id se match karo
+#             if not target_tab and tab_id:
+#                 for tab in tabs:
+#                     props = tab.get("tabProperties", {})
+#                     if props.get("tabId") == tab_id:
+#                         target_tab = tab
+#                         break
+
+#             # 3. Fallback — pehla tab
+#             if not target_tab:
+#                 target_tab = tabs[0]
+
+#             tab_title = target_tab.get("tabProperties", {}).get("title", "Unknown")
+#             print(f"Reading from tab: '{tab_title}'")
+
+#             # Sirf is tab ka text lo
+#             doc_tab = target_tab.get("documentTab", {})
+#             content = doc_tab.get("body", {}).get("content", [])
+#             for block in content:
+#                 for elem in block.get("paragraph", {}).get("elements", []):
+#                     all_text += elem.get("textRun", {}).get("content", "")
+
+#             # Child tabs bhi is tab ke under hain toh lo
+#             for child in target_tab.get("childTabs", []):
+#                 child_content = child.get("documentTab", {}).get("body", {}).get("content", [])
+#                 for block in child_content:
+#                     for elem in block.get("paragraph", {}).get("elements", []):
+#                         all_text += elem.get("textRun", {}).get("content", "")
+#         else:
+#             all_text = _get_doc_text(doc)
+
+#         print(f"Text preview:\n{all_text[:300]}")
+
+#         result = []
+
+#         # Format 1: "Issue #5 [MODULE]" naya format
+#         pattern1 = re.compile(
+#             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
+#             r"Title:\s*(.+?)\s*\n"
+#             r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)\s{2,}Created On:\s*(.+?)(?=\n─|\nIssue #|\Z)",
+#             re.DOTALL
+#         )
+#         for m in pattern1.finditer(all_text):
+#             result.append({
+#                 "number":   int(m.group(1)),
+#                 "title":    m.group(2).strip(),
+#                 "status":   _normalize_status(m.group(3).strip()),
+#                 "priority": m.group(4).strip().lower(),
+#                 "created":  m.group(5).strip().split("\n")[0].strip(),
+#             })
+
+#         # Format 2: "1. TITLE\n   ISSUE: desc"
+#         if not result:
+#             pattern2 = re.compile(
+#                 r"(\d+)\.\s+(.+?)\n\s+(?:ISSUE|FEATURE):\s+(.+?)(?=\n\d+\.|\Z)",
+#                 re.DOTALL
+#             )
+#             for m in pattern2.finditer(all_text):
+#                 title = m.group(2).strip()
+#                 if title:
+#                     result.append({
+#                         "number":   int(m.group(1)),
+#                         "title":    title[:100],
+#                         "status":   "open",
+#                         "priority": "medium",
+#                         "created":  "",
+#                     })
+
+#         # Format 3: simple numbered list
+#         if not result:
+#             pattern3 = re.compile(r"^\s*(\d+)[.)]\s+(.{5,150})$", re.MULTILINE)
+#             for m in pattern3.finditer(all_text):
+#                 title = m.group(2).strip()
+#                 if title and not title.upper().startswith("ISSUE:") and not title.upper().startswith("UPDATE:"):
+#                     result.append({
+#                         "number":   int(m.group(1)),
+#                         "title":    title[:100],
+#                         "status":   "open",
+#                         "priority": "medium",
+#                         "created":  "",
+#                     })
+
+#         # Duplicates remove
+#         seen = set()
+#         unique = []
+#         for issue in result:
+#             if issue["number"] not in seen:
+#                 seen.add(issue["number"])
+#                 unique.append(issue)
+
+#         print(f"✓ Found {len(unique)} issues")
+#         return unique
+
+#     except Exception as e:
+#         print(f"Doc fetch error: {e}")
+#         return []
+# def _normalize_status(status: str) -> str:
+#     status = status.lower().strip()
+#     mapping = {
+#         "open":        "open",
+#         "in progress": "in_progress",
+#         "in_progress": "in_progress",
+#         "inprogress":  "in_progress",
+#         "testing":     "testing",
+#         "blocked":     "blocked",
+#         "resolved":    "resolved",
+#         "closed":      "closed",
+#         "done":        "resolved",
+#         "fixed":       "resolved",
+#         "complete":    "closed",
+#         "completed":   "closed",
+#     }
+#     return mapping.get(status, "open")
+# def get_all_issues(doc_id=None, tab_id: str = None):
+#     if not doc_id:
+#         return []
+#     try:
+#         doc = get_document(doc_id)
+#         all_text = ""
+
+#         # Tabs hain toh saare tabs ka text nikalo
+#         tabs = doc.get("tabs", [])
+#         if tabs:
+#             for tab in tabs:
+#                 doc_tab = tab.get("documentTab", {})
+#                 content = doc_tab.get("body", {}).get("content", [])
+#                 for block in content:
+#                     for elem in block.get("paragraph", {}).get("elements", []):
+#                         all_text += elem.get("textRun", {}).get("content", "")
+#                 # Child tabs bhi
+#                 for child in tab.get("childTabs", []):
+#                     child_content = child.get("documentTab", {}).get("body", {}).get("content", [])
+#                     for block in child_content:
+#                         for elem in block.get("paragraph", {}).get("elements", []):
+#                             all_text += elem.get("textRun", {}).get("content", "")
+#         else:
+#             # No tabs — regular doc
+#             all_text = _get_doc_text(doc)
+
+#         print(f"Total text length: {len(all_text)}")
+#         print(f"Text preview:\n{all_text[:400]}")
+
+#         issues = []
+
+#         # Format 1: "Issue #5 [MODULE]" naya format
+#         pattern1 = re.compile(
+#             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
+#             r"Title:\s*(.+?)\s*\n"
+#             r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)\s{2,}Created On:\s*(.+?)(?=\n─|\nIssue #|\Z)",
+#             re.DOTALL
+#         )
+#         for m in pattern1.finditer(all_text):
+#             issues.append({
+#                 "number":   int(m.group(1)),
+#                 "title":    m.group(2).strip(),
+#                 "status":   _normalize_status(m.group(3).strip()),
+#                 "priority": m.group(4).strip().lower(),
+#                 "created":  m.group(5).strip().split("\n")[0].strip(),
+#             })
+
+#         # Format 2: "1. TITLE" purana format
+#         if not issues:
+#             pattern2 = re.compile(r"^\s*(\d+)\.\s+(.+?)$", re.MULTILINE)
+#             for m in pattern2.finditer(all_text):
+#                 title = m.group(2).strip()
+#                 if title and len(title) > 2:
+#                     issues.append({
+#                         "number":   int(m.group(1)),
+#                         "title":    title[:100],
+#                         "status":   "open",
+#                         "priority": "medium",
+#                         "created":  "",
+#                     })
+
+#         # Format 3: koi bhi numbered list
+#         if not issues:
+#             pattern3 = re.compile(r"(?:^|\n)(\d+)[.)]\s+(.{5,100})", re.MULTILINE)
+#             for m in pattern3.finditer(all_text):
+#                 title = m.group(2).strip()
+#                 if title:
+#                     issues.append({
+#                         "number":   int(m.group(1)),
+#                         "title":    title[:100],
+#                         "status":   "open",
+#                         "priority": "medium",
+#                         "created":  "",
+#                     })
+
+#         # Duplicates remove
+#         seen = set()
+#         unique = []
+#         for issue in issues:
+#             if issue["number"] not in seen:
+#                 seen.add(issue["number"])
+#                 unique.append(issue)
+
+#         print(f"✓ Found {len(unique)} issues")
+#         return unique
+
+#     except Exception as e:
+#         print(f"Doc fetch error: {e}")
+#         return []
+def get_all_issues(doc_id=None, tab_id: str = None):
     if not doc_id:
         return []
     try:
-        doc  = get_document(doc_id)
-        text = _get_doc_text(doc)
-        issues = []
+        doc = get_document(doc_id)
+        all_text = ""
+        tabs = doc.get("tabs", [])
 
-        pattern = re.compile(
+        if tabs:
+            target_tab = None
+
+            # 1. Pehle "ISSUES" naam ka tab dhundo
+            for tab in tabs:
+                props = tab.get("tabProperties", {})
+                title = props.get("title", "").strip().lower()
+                if title == "issues" or title == "issue":
+                    target_tab = tab
+                    break
+
+            # 2. tab_id se match karo
+            if not target_tab and tab_id:
+                for tab in tabs:
+                    props = tab.get("tabProperties", {})
+                    if props.get("tabId") == tab_id:
+                        target_tab = tab
+                        break
+
+            # 3. Fallback — pehla tab
+            if not target_tab:
+                target_tab = tabs[0]
+
+            tab_title = target_tab.get("tabProperties", {}).get("title", "Unknown")
+            print(f"Reading from tab: '{tab_title}'")
+
+            # Sirf is tab ka text lo
+            doc_tab = target_tab.get("documentTab", {})
+            content = doc_tab.get("body", {}).get("content", [])
+            for block in content:
+                for elem in block.get("paragraph", {}).get("elements", []):
+                    all_text += elem.get("textRun", {}).get("content", "")
+
+            # Child tabs bhi is tab ke under hain toh lo
+            for child in target_tab.get("childTabs", []):
+                child_content = child.get("documentTab", {}).get("body", {}).get("content", [])
+                for block in child_content:
+                    for elem in block.get("paragraph", {}).get("elements", []):
+                        all_text += elem.get("textRun", {}).get("content", "")
+        else:
+            all_text = _get_doc_text(doc)
+
+        print(f"Text preview:\n{all_text[:300]}")
+
+        result = []
+
+        # Format 1: "Issue #5 [MODULE]" naya format
+        pattern1 = re.compile(
             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
             r"Title:\s*(.+?)\s*\n"
             r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)\s{2,}Created On:\s*(.+?)(?=\n─|\nIssue #|\Z)",
             re.DOTALL
         )
-
-        status_map = {
-            "open":        "open",
-            "in progress": "in_progress",
-            "in_progress": "in_progress",
-            "testing":     "testing",
-            "blocked":     "blocked",
-            "resolved":    "resolved",
-            "closed":      "closed",
-        }
-
-        for match in pattern.finditer(text):
-            number   = int(match.group(1))
-            title    = match.group(2).strip()
-            status   = match.group(3).strip().lower()
-            priority = match.group(4).strip().lower()
-            created  = match.group(5).strip().split("\n")[0].strip()
-
-            if not title:
-                continue
-
-            issues.append({
-                "number":   number,
-                "title":    title,
-                "status":   status_map.get(status, "open"),
-                "priority": priority,
-                "created":  created,
+        for m in pattern1.finditer(all_text):
+            result.append({
+                "number":   int(m.group(1)),
+                "title":    m.group(2).strip(),
+                "status":   _normalize_status(m.group(3).strip()),
+                "priority": m.group(4).strip().lower(),
+                "created":  m.group(5).strip().split("\n")[0].strip(),
             })
 
-        print(f"✓ Found {len(issues)} issues")
-        return issues
+        # Format 2: "1. TITLE\n   ISSUE: desc"
+        if not result:
+            pattern2 = re.compile(
+                r"(\d+)\.\s+(.+?)\n\s+(?:ISSUE|FEATURE):\s+(.+?)(?=\n\d+\.|\Z)",
+                re.DOTALL
+            )
+            for m in pattern2.finditer(all_text):
+                title = m.group(2).strip()
+                if title:
+                    result.append({
+                        "number":   int(m.group(1)),
+                        "title":    title[:100],
+                        "status":   "open",
+                        "priority": "medium",
+                        "created":  "",
+                    })
+
+        # Format 3: simple numbered list
+        if not result:
+            pattern3 = re.compile(r"^\s*(\d+)[.)]\s+(.{5,150})$", re.MULTILINE)
+            for m in pattern3.finditer(all_text):
+                title = m.group(2).strip()
+                if title and not title.upper().startswith("ISSUE:") and not title.upper().startswith("UPDATE:"):
+                    result.append({
+                        "number":   int(m.group(1)),
+                        "title":    title[:100],
+                        "status":   "open",
+                        "priority": "medium",
+                        "created":  "",
+                    })
+
+        # Duplicates remove
+        seen = set()
+        unique = []
+        for issue in result:
+            if issue["number"] not in seen:
+                seen.add(issue["number"])
+                unique.append(issue)
+
+        print(f"✓ Found {len(unique)} issues")
+        return unique
 
     except Exception as e:
         print(f"Doc fetch error: {e}")
         return []
-
+def _normalize_status(status: str) -> str:
+    status = status.lower().strip()
+    mapping = {
+        "open":        "open",
+        "in progress": "in_progress",
+        "in_progress": "in_progress",
+        "inprogress":  "in_progress",
+        "testing":     "testing",
+        "blocked":     "blocked",
+        "resolved":    "resolved",
+        "closed":      "closed",
+        "done":        "resolved",
+        "fixed":       "resolved",
+        "complete":    "closed",
+        "completed":   "closed",
+    }
+    return mapping.get(status, "open") 
 
 def search_docs(query: str = "") -> list:
     try:
