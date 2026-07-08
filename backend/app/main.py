@@ -11,15 +11,13 @@ app = FastAPI(title="Google docs automation")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://ems-ashen-eight.vercel.app",  # ← tumhara Vercel URL
-        "https://*.vercel.app",
-    ],
+    allow_origins=["*"],  # ← sabse simple fix — sab allow karo
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # allow_credentials=True,
+    # allow_methods=["*"],
+    # allow_headers=["*"],
 )
 
 app.include_router(intent_router, prefix="/api")
