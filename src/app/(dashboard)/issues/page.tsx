@@ -40,11 +40,11 @@ interface SpeechRecognitionInstance {
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   open:        { label: "Open",        color: "#ef4444", bg: "#fef2f2" },
-  in_progress: { label: "In Progress", color: "#f59e0b", bg: "#fffbeb" },
-  testing:     { label: "Testing",     color: "#6366f1", bg: "#eef2ff" },
+  // in_progress: { label: "In Progress", color: "#f59e0b", bg: "#fffbeb" },
+  // testing:     { label: "Testing",     color: "#6366f1", bg: "#eef2ff" },
   blocked:     { label: "Blocked",     color: "#dc2626", bg: "#fee2e2" },
   resolved:    { label: "Resolved",    color: "#22c55e", bg: "#f0fdf4" },
-  closed:      { label: "Closed",      color: "#6b7280", bg: "#f3f4f6" },
+  // closed:      { label: "Closed",      color: "#6b7280", bg: "#f3f4f6" },
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -53,7 +53,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; bg: string
   low:    { label: "Low",    color: "#22c55e", bg: "#f0fdf4" },
 };
 
-const ALL_STATUSES = ["all", "open", "in_progress", "testing", "blocked", "resolved", "closed"];
+const ALL_STATUSES = ["all", "open", "resolved"];
 const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 export default function IssuesPage() {
   const [issues, setIssues]             = useState<Issue[]>([]);
@@ -191,6 +191,7 @@ const connectDoc = async () => {
   try {
     const res = await fetch(`${API_URL}/api/actions/issues?doc_id=${id}`);
     const data = await res.json();
+    
     if (data.success) {
       setIssues(prev => {
         const existingNumbers = new Set(prev.map(i => i.number));
