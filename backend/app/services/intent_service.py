@@ -811,13 +811,13 @@ def build_user_prompt(request: IntentRequest) -> str:
 
 
 def call_ai(prompt: str) -> str:
-   models = [
-    "openrouter/free",                # OpenRouter automatically selects a free model
-    "openai/gpt-oss-20b:free",
-    "openai/gpt-oss-120b:free",
-    "qwen/qwen3-coder:free",
-    "z-ai/glm-4.5-air:free",
-]
+    models = [
+        "openrouter/free",                # OpenRouter automatically selects a free model
+        "openai/gpt-oss-20b:free",
+        "openai/gpt-oss-120b:free",
+        "qwen/qwen3-coder:free",
+        "z-ai/glm-4.5-air:free",
+    ]
         # "google/gemma-3-27b-it:free",
         # "google/gemini-2.0-flash-lite:free",           # fastest
         # "google/gemini-2.5-flash:free",                # very good
