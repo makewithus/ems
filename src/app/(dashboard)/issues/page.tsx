@@ -138,8 +138,11 @@ const [showDropdown, setShowDropdown] = useState(false);
   };
 const connectDoc = async () => {
   const id = extractDocId(urlInput);
+  
   if (!id) { setUrlError("Invalid Google Doc URL"); return; }
   setUrlError("");
+localStorage.setItem("ems_doc_id", id);
+  localStorage.setItem("ems_doc_url", urlInput);
 
   // Doc title fetch karo
   try {
@@ -193,11 +196,12 @@ const connectDoc = async () => {
     const data = await res.json();
     
     if (data.success) {
-      setIssues(prev => {
-        const existingNumbers = new Set(prev.map(i => i.number));
-        const newIssues = data.issues.filter((i: Issue) => !existingNumbers.has(i.number));
-        return [...prev, ...newIssues];
-      });
+      // setIssues(prev => {
+      //   const existingNumbers = new Set(prev.map(i => i.number));
+      //   const newIssues = data.issues.filter((i: Issue) => !existingNumbers.has(i.number));
+      //   return [...prev, ...newIssues];
+      // });
+      setIssues(data.issues);
       if (data.tab_name) setActiveTabName(data.tab_name);
     }
   } catch { setError("Could not fetch issues."); }
