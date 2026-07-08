@@ -628,68 +628,96 @@ def _get_last_issue_number(doc, tab_id: str = None) -> int:
 #     old_format = re.findall(r"^\s*(\d+)\.", text, re.MULTILINE)
 #     return max([int(n) for n in old_format], default=0)
 
-def _find_issue_range(doc, issue_number: int):
+def _find_issue_range(doc, issue_number: int, tab_id: str = None):
+    content = _get_tab_content(doc, tab_id)
     start = None
-    end   = None
-    index = 1
+    end = None
 
-    # Tabs support ke saath content lo
-    all_blocks = []
-    
-    # Pehle tabs check karo
-    tabs = doc.get("tabs", [])
-    if tabs:
-        for tab in tabs:
-            tab_props = tab.get("documentTab", {}).get("properties", {})
-            if tab_props.get("title", "").lower() == "issues":
-                body = tab.get("documentTab", {}).get("body", {})
-                all_blocks = body.get("content", [])
-                break
-        if not all_blocks:
-            # Koi bhi tab ka content lo
-            for tab in tabs:
-                body = tab.get("documentTab", {}).get("body", {})
-                content = body.get("content", [])
-                if content:
-                    all_blocks = content
-                    break
-    
-    # Fallback — normal body
-    if not all_blocks:
-        all_blocks = doc.get("body", {}).get("content", [])
-
-    for block in all_blocks:
-        para      = block.get("paragraph", {})
-        full_text = ""
-        for elem in para.get("elements", []):
-            full_text += elem.get("textRun", {}).get("content", "")
-
-        # Naya format: "Issue #1" ya "Issue #1 [MODULE]"
-        new_fmt = re.match(
-            rf"^\s*Issue #{issue_number}(?:\s*\[|\s*\n|$)", 
-            full_text
+    for block in content:
+        para = block.get("paragraph", {})
+        full_text = "".join(
+            elem.get("textRun", {}).get("content", "")
+            for elem in para.get("elements", [])
         )
-        # Purana format: "1."
-        old_fmt = re.match(rf"^\s*{issue_number}\.", full_text)
+        block_start = block.get("startIndex")
+        block_end = block.get("endIndex")
 
-        if new_fmt or old_fmt:
-            start = index
-        elif start is not None:
-            next_new = re.match(r"^\s*Issue #\d+", full_text)
-            next_old = re.match(r"^\s*\d+\.", full_text)
-            # Divider line bhi end mark kare
-            divider  = re.match(r"^\s*─+", full_text)
-            if next_new or next_old:
-                end = index
-                break
+        this_issue = re.match(rf"^\s*{issue_number}\.\s+", full_text)
+        any_issue  = re.match(r"^\s*\d+\.\s+", full_text)
 
-        for elem in para.get("elements", []):
-            index += len(elem.get("textRun", {}).get("content", ""))
+        if this_issue and start is None:
+            start = block_start
+        elif start is not None and any_issue:
+            end = block_start
+            break
 
-    if start and not end:
-        end = index
+    if start is not None and end is None and content:
+        end = content[-1].get("endIndex", start)
 
-    return (start, end) if start else None
+    return (start, end) if start is not None else None
+
+# def _find_issue_range(doc, issue_number: int):
+#     start = None
+#     end   = None
+#     index = 1
+
+#     # Tabs support ke saath content lo
+#     all_blocks = []
+    
+#     # Pehle tabs check karo
+#     tabs = doc.get("tabs", [])
+#     if tabs:
+#         for tab in tabs:
+#             tab_props = tab.get("documentTab", {}).get("properties", {})
+#             if tab_props.get("title", "").lower() == "issues":
+#                 body = tab.get("documentTab", {}).get("body", {})
+#                 all_blocks = body.get("content", [])
+#                 break
+#         if not all_blocks:
+#             # Koi bhi tab ka content lo
+#             for tab in tabs:
+#                 body = tab.get("documentTab", {}).get("body", {})
+#                 content = body.get("content", [])
+#                 if content:
+#                     all_blocks = content
+#                     break
+    
+#     # Fallback — normal body
+#     if not all_blocks:
+#         all_blocks = doc.get("body", {}).get("content", [])
+
+#     for block in all_blocks:
+#         para      = block.get("paragraph", {})
+#         full_text = ""
+#         for elem in para.get("elements", []):
+#             full_text += elem.get("textRun", {}).get("content", "")
+
+#         # Naya format: "Issue #1" ya "Issue #1 [MODULE]"
+#         new_fmt = re.match(
+#             rf"^\s*Issue #{issue_number}(?:\s*\[|\s*\n|$)", 
+#             full_text
+#         )
+#         # Purana format: "1."
+#         old_fmt = re.match(rf"^\s*{issue_number}\.", full_text)
+
+#         if new_fmt or old_fmt:
+#             start = index
+#         elif start is not None:
+#             next_new = re.match(r"^\s*Issue #\d+", full_text)
+#             next_old = re.match(r"^\s*\d+\.", full_text)
+#             # Divider line bhi end mark kare
+#             divider  = re.match(r"^\s*─+", full_text)
+#             if next_new or next_old:
+#                 end = index
+#                 break
+
+#         for elem in para.get("elements", []):
+#             index += len(elem.get("textRun", {}).get("content", ""))
+
+#     if start and not end:
+#         end = index
+
+#     return (start, end) if start else None
 
 
 # def _find_issue_range(doc, issue_number: int):
@@ -993,10 +1021,44 @@ def update_issue_status(issue_number, new_status, doc_id=None):
         return {"issue_number": issue_number, "action": "status_updated", "new_status": new_status}
     except Exception as e:
         return {"error": str(e)}
+def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
+    """Issue ko poora remove karo doc se (resolve = delete)."""
+    if not doc_id:
+        return {"error": "No Google Doc ID provided"}
+    try:
+        service = get_docs_service()
+        doc     = get_document(doc_id)
 
+        if not tab_id:
+            tab_id = _get_tab_id(doc, "issues")
 
-def resolve_issue(issue_number, doc_id=None):
-    return update_issue_status(issue_number, "RESOLVED", doc_id)
+        range_result = _find_issue_range(doc, issue_number, tab_id)
+        if not range_result:
+            return {"error": f"Issue #{issue_number} not found"}
+
+        start, end = range_result
+
+        delete_req = {
+            "deleteContentRange": {
+                "range": {"startIndex": start, "endIndex": end}
+            }
+        }
+        if tab_id:
+            delete_req["deleteContentRange"]["range"]["tabId"] = tab_id
+
+        service.documents().batchUpdate(
+            documentId=doc_id,
+            body={"requests": [delete_req]}
+        ).execute()
+
+        print(f"✓ Issue #{issue_number} resolved & removed")
+        return {"issue_number": issue_number, "action": "resolved"}
+
+    except Exception as e:
+        return {"error": str(e)}
+
+# def resolve_issue(issue_number, doc_id=None):
+#     return update_issue_status(issue_number, "RESOLVED", doc_id)
 
 
 def delete_issue(issue_number, doc_id=None):
