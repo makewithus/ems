@@ -2298,12 +2298,22 @@ def get_all_issues(doc_id=None, tab_id: str = None):
                 })
 
         # Format 3: "12. TITLE" numbered list
-        p3 = re.compile(r"^(\d+)\.\s+(.{5,200})$", re.MULTILINE)
+        # p3 = re.compile(r"^(\d+)\.\s+(.{5,200})$", re.MULTILINE)
+        p3 = re.compile(
+    r"^\s*(\d+)\.\s+([^\n\r]+)",
+    re.MULTILINE
+)   
         skip = ["ISSUE:", "UPDATE:", "TYPE:", "STATUS:", "DESCRIPTION:",
                 "NOTE:", "Title:", "Type:", "Priority:", "Created"]
         for m in p3.finditer(all_text):
             num   = int(m.group(1))
-            title = m.group(2).strip()
+            title = (
+    m.group(2)
+    .replace("\u000b", "")
+    .replace("\r", "")
+    .replace("\n", " ")
+    .strip()
+)
             if num not in seen and title:
                 if not any(title.startswith(s) for s in skip):
                     seen.add(num)
@@ -2322,7 +2332,8 @@ def get_all_issues(doc_id=None, tab_id: str = None):
     except Exception as e:
         print(f"Doc fetch error: {e}")
         return []
-
+    
+    
 
 # ─── Drive Helpers ────────────────────────────────────────────────────────────
 
