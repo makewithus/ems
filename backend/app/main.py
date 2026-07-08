@@ -8,17 +8,29 @@ from app.api.actions import router as actions_router
 load_dotenv()
 
 app = FastAPI(title="Google docs automation")
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ← sabse simple fix — sab allow karo
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://ems-ashen-eight.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    # allow_credentials=True,
-    # allow_methods=["*"],
-    # allow_headers=["*"],
 )
+
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # ← sabse simple fix — sab allow karo
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+#     # allow_credentials=True,
+#     # allow_methods=["*"],
+#     # allow_headers=["*"],
+# )
 
 app.include_router(intent_router, prefix="/api")
 app.include_router(voice_router, prefix="/api")
