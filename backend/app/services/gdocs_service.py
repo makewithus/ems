@@ -1062,6 +1062,42 @@ def _find_status_range(doc, issue_number: int, tab_id: str = None):
             return block_start + m.start(1), block_start + m.end(1)
     return None
 
+# def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
+#     """Issue ko poora remove karo doc se (resolve = delete)."""
+#     if not doc_id:
+#         return {"error": "No Google Doc ID provided"}
+#     try:
+#         service = get_docs_service()
+#         doc     = get_document(doc_id)
+
+#         if not tab_id:
+#             tab_id = _get_tab_id(doc, "issues")
+
+#         range_result = _find_issue_range(doc, issue_number, tab_id)
+#         if not range_result:
+#             return {"error": f"Issue #{issue_number} not found"}
+
+#         start, end = range_result
+
+#         delete_req = {
+#             "deleteContentRange": {
+#                 "range": {"startIndex": start, "endIndex": end}
+#             }
+#         }
+#         if tab_id:
+#             delete_req["deleteContentRange"]["range"]["tabId"] = tab_id
+
+#         service.documents().batchUpdate(
+#             documentId=doc_id,
+#             body={"requests": [delete_req]}
+#         ).execute()
+
+#         print(f"✓ Issue #{issue_number} resolved & removed")
+#         return {"issue_number": issue_number, "action": "resolved"}
+
+#     except Exception as e:
+#         return {"error": str(e)}
+
 def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
     """Issue ko poora remove karo doc se (resolve = delete)."""
     if not doc_id:
@@ -1079,9 +1115,15 @@ def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
 
         start, end = range_result
 
+        # Google Docs restriction: last segment ka final newline
+        # akela delete nahi ho sakta — isliye end ko 1 peeche karo
+        safe_end = end - 1
+        if safe_end <= start:
+            safe_end = end
+
         delete_req = {
             "deleteContentRange": {
-                "range": {"startIndex": start, "endIndex": end}
+                "range": {"startIndex": start, "endIndex": safe_end}
             }
         }
         if tab_id:
@@ -1097,6 +1139,7 @@ def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
 
     except Exception as e:
         return {"error": str(e)}
+    
 # def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
 #     """Status ko RESOLVED karo — issue delete nahi hoga."""
 #     if not doc_id:
