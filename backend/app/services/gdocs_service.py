@@ -481,6 +481,7 @@ from datetime import date
 from dotenv import load_dotenv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from functools import lru_cache
 
 load_dotenv()
 
@@ -489,7 +490,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-
+@lru_cache(maxsize=1)
 def get_credentials():
     """Service Account se credentials lo."""
     creds_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
@@ -505,12 +506,35 @@ def get_credentials():
     )
 
 
+@lru_cache(maxsize=1)
 def get_docs_service():
     return build("docs", "v1", credentials=get_credentials())
 
 
+@lru_cache(maxsize=1)
 def get_drive_service():
     return build("drive", "v3", credentials=get_credentials())
+# def get_credentials():
+#     """Service Account se credentials lo."""
+#     creds_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+#     if creds_json:
+#         creds_dict = json.loads(creds_json)
+#         return service_account.Credentials.from_service_account_info(
+#             creds_dict, scopes=SCOPES
+#         )
+#     # Local fallback
+#     creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials/google_service_account.json")
+#     return service_account.Credentials.from_service_account_file(
+#         creds_path, scopes=SCOPES
+#     )
+
+
+# def get_docs_service():
+#     return build("docs", "v1", credentials=get_credentials())
+
+
+# def get_drive_service():
+#     return build("drive", "v3", credentials=get_credentials())
 
 def get_document(doc_id: str, tab_id: str = None):
     service = get_docs_service()
