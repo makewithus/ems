@@ -211,14 +211,14 @@ import time
 
 def call_ai(prompt: str) -> str:
     models = [
-        # "meta-llama/llama-3.3-70b-instruct:free",
-        # "openai/gpt-oss-20b:free",
-        # "nvidia/nemotron-3-super:free",
-        # "meta-llama/llama-3.2-3b-instruct:free",
-        "google/gemini-2.0-flash-lite:free",           # fastest
-        "google/gemini-2.5-flash:free",                # very good
-        "mistralai/mistral-small-3.2-24b-instruct:free", # reliable
-        "meta-llama/llama-3.3-70b-instruct:free", 
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "openai/gpt-oss-20b:free",
+        "nvidia/nemotron-3-super:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+        # "google/gemini-2.0-flash-lite:free",           # fastest
+        # "google/gemini-2.5-flash:free",                # very good
+        # "mistralai/mistral-small-3.2-24b-instruct:free", # reliable
+        # "meta-llama/llama-3.3-70b-instruct:free", 
     ]
     
     for model in models:
