@@ -577,13 +577,40 @@ def _get_doc_text(doc, tab_id: str = None) -> str:
     return text
 
 
+# def _get_last_issue_number(doc, tab_id: str = None) -> int:
+#     text = _get_doc_text(doc, tab_id)
+#     new_format = re.findall(r"Issue #(\d+)", text)
+#     if new_format:
+#         return max([int(n) for n in new_format], default=0)
+#     old_format = re.findall(r"^\s*(\d+)\.", text, re.MULTILINE)
+#     return max([int(n) for n in old_format], default=0)
 def _get_last_issue_number(doc, tab_id: str = None) -> int:
-    text = _get_doc_text(doc, tab_id)
-    new_format = re.findall(r"Issue #(\d+)", text)
-    if new_format:
-        return max([int(n) for n in new_format], default=0)
-    old_format = re.findall(r"^\s*(\d+)\.", text, re.MULTILINE)
-    return max([int(n) for n in old_format], default=0)
+    """Saare tabs mein se highest issue number nikalo"""
+    all_text = ""
+    tabs = doc.get("tabs", [])
+    
+    if tabs:
+        # Saare tabs ka text combine karo — global numbering ke liye
+        for tab in tabs:
+            doc_tab = tab.get("documentTab", {})
+            content = doc_tab.get("body", {}).get("content", [])
+            for block in content:
+                for elem in block.get("paragraph", {}).get("elements", []):
+                    all_text += elem.get("textRun", {}).get("content", "")
+            for child in tab.get("childTabs", []):
+                child_content = child.get("documentTab", {}).get("body", {}).get("content", [])
+                for block in child_content:
+                    for elem in block.get("paragraph", {}).get("elements", []):
+                        all_text += elem.get("textRun", {}).get("content", "")
+    else:
+        all_text = _get_doc_text(doc)
+
+    # Dono formats check karo
+    new_format = re.findall(r"Issue #(\d+)", all_text)
+    old_format = re.findall(r"^\s*(\d+)\.", all_text, re.MULTILINE)
+    
+    all_numbers = [int(n) for n in new_format + old_format]
+    return max(all_numbers, default=0) 
 
 # def _get_doc_text(doc) -> str:
 #     text = ""
@@ -727,68 +754,143 @@ def _find_status_position(doc, issue_number: int):
 
     return start_index, end_index
 
+
 def create_issue(title, description, issue_type="issue", module=None,
                  note=None, doc_id=None, observations=None,
                  priority="medium", status="open", tab_id: str = None):
     if not doc_id:
         return {"error": "No Google Doc ID provided"}
     try:
-        service      = get_docs_service()
-        doc          = get_document(doc_id)
-        
-        # Auto-detect issues tab agar tab_id nahi diya
-        if not tab_id:
-            tab_id = _get_tab_id(doc, "issues")
-        
-        next_number  = _get_last_issue_number(doc, tab_id) + 1
-        content      = _get_tab_content(doc, tab_id)
-        last_element = content[-1] if content else None
-        insert_index = last_element.get("endIndex", 1) - 1 if last_element else 1
+        service     = get_docs_service()
+        doc         = get_document(doc_id)
+        next_number = _get_last_issue_number(doc) + 1
+        content     = _get_tab_content(doc, tab_id)
+        last_elem   = content[-1] if content else None
+        insert_idx  = last_elem.get("endIndex", 1) - 1 if last_elem else 1
 
         today        = date.today().strftime("%d %b %Y")
-        type_label   = "ISSUE" if issue_type == "issue" else "FEATURE"
         module_tag   = f" [{module.upper()}]" if module else ""
         priority_str = (priority or "medium").upper()
 
         obs_text = ""
         if observations and len(observations) > 0:
-            obs_lines = "\n".join([f"   • {o}" for o in observations])
-            obs_text  = f"\nObservations:\n{obs_lines}"
+            obs_lines = "\n".join([f"• {o}" for o in observations])
+            obs_text  = f"\n{obs_lines}"
 
-        note_text = f"\nNote: {note}" if note else ""
+        note_text = f"\n~ {note}" if note else ""
 
-        new_text = (
-            f"\nIssue #{next_number}{module_tag}\n"
-            f"Title: {title}\n"
-            f"Type: {type_label}\n"
-            f"Description:\n   {description}"
-            f"{obs_text}"
-            f"\nStatus: OPEN   Priority: {priority_str}   Created On: {today}"
-            f"{note_text}\n"
-            f"{'─' * 50}\n"
-        )
+        # Format exactly like doc
+        # "1. TITLE IN CAPS"
+        # "description in normal text. ~ extra note"
+        title_line = f"\n{next_number}. {title.upper()}{module_tag}\n"
+        desc_line  = f"{description}{obs_text}{note_text}\n"
 
-        request_body = {
+        full_text  = title_line + desc_line
+
+        title_start = insert_idx + 1
+        title_end   = title_start + len(title_line.strip())
+
+        # Insert text
+        insert_req = {
             "insertText": {
-                "location": {"index": insert_index},
-                "text": new_text
+                "location": {"index": insert_idx},
+                "text": full_text
             }
         }
 
-        # Tab ID hoga toh location mein add karo
+        # Title bold karo
+        bold_req = {
+            "updateTextStyle": {
+                "range": {
+                    "startIndex": title_start,
+                    "endIndex":   title_end,
+                },
+                "textStyle": {
+                    "bold": True,
+                },
+                "fields": "bold"
+            }
+        }
+
         if tab_id:
-            request_body["insertText"]["location"]["tabId"] = tab_id
+            insert_req["insertText"]["location"]["tabId"] = tab_id
+            bold_req["updateTextStyle"]["range"]["tabId"] = tab_id
 
         service.documents().batchUpdate(
             documentId=doc_id,
-            body={"requests": [request_body]}
+            body={"requests": [insert_req, bold_req]}
         ).execute()
 
-        print(f"✓ Issue #{next_number} added to tab '{tab_id}' in doc: {doc_id}")
+        print(f"✓ Issue #{next_number} added")
         return {"issue_number": next_number, "title": title, "action": "created"}
 
     except Exception as e:
         return {"error": str(e)}
+    
+
+    
+# def create_issue(title, description, issue_type="issue", module=None,
+#                  note=None, doc_id=None, observations=None,
+#                  priority="medium", status="open", tab_id: str = None):
+#     if not doc_id:
+#         return {"error": "No Google Doc ID provided"}
+#     try:
+#         service      = get_docs_service()
+#         doc          = get_document(doc_id)
+        
+#         # Auto-detect issues tab agar tab_id nahi diya
+#         if not tab_id:
+#             tab_id = _get_tab_id(doc, "issues")
+        
+#         next_number  = _get_last_issue_number(doc, tab_id) + 1
+#         content      = _get_tab_content(doc, tab_id)
+#         last_element = content[-1] if content else None
+#         insert_index = last_element.get("endIndex", 1) - 1 if last_element else 1
+
+#         today        = date.today().strftime("%d %b %Y")
+#         type_label   = "ISSUE" if issue_type == "issue" else "FEATURE"
+#         module_tag   = f" [{module.upper()}]" if module else ""
+#         priority_str = (priority or "medium").upper()
+
+#         obs_text = ""
+#         if observations and len(observations) > 0:
+#             obs_lines = "\n".join([f"   • {o}" for o in observations])
+#             obs_text  = f"\nObservations:\n{obs_lines}"
+
+#         note_text = f"\nNote: {note}" if note else ""
+
+#         new_text = (
+#             f"\nIssue #{next_number}{module_tag}\n"
+#             f"Title: {title}\n"
+#             f"Type: {type_label}\n"
+#             f"Description:\n   {description}"
+#             f"{obs_text}"
+#             f"\nStatus: OPEN   Priority: {priority_str}   Created On: {today}"
+#             f"{note_text}\n"
+#             f"{'─' * 50}\n"
+#         )
+
+#         request_body = {
+#             "insertText": {
+#                 "location": {"index": insert_index},
+#                 "text": new_text
+#             }
+#         }
+
+#         # Tab ID hoga toh location mein add karo
+#         if tab_id:
+#             request_body["insertText"]["location"]["tabId"] = tab_id
+
+#         service.documents().batchUpdate(
+#             documentId=doc_id,
+#             body={"requests": [request_body]}
+#         ).execute()
+
+#         print(f"✓ Issue #{next_number} added to tab '{tab_id}' in doc: {doc_id}")
+#         return {"issue_number": next_number, "title": title, "action": "created"}
+
+#     except Exception as e:
+#         return {"error": str(e)}
     
 # def create_issue(title, description, issue_type="issue", module=None,
 #                  note=None, doc_id=None, observations=None,
