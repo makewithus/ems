@@ -828,7 +828,7 @@ def create_issue(title, description, issue_type="issue", module=None,
         return {"error": str(e)}
     
 
-    
+
 # def create_issue(title, description, issue_type="issue", module=None,
 #                  note=None, doc_id=None, observations=None,
 #                  priority="medium", status="open", tab_id: str = None):
@@ -1468,37 +1468,37 @@ def get_all_issues(doc_id=None, tab_id: str = None):
         if tabs:
             target_tab = None
 
-            # 1. Pehle "ISSUES" naam ka tab dhundo
-            for tab in tabs:
-                props = tab.get("tabProperties", {})
-                title = props.get("title", "").strip().lower()
-                if title == "issues" or title == "issue":
-                    target_tab = tab
-                    break
-
-            # 2. tab_id se match karo
-            if not target_tab and tab_id:
+            if tab_id:
                 for tab in tabs:
                     props = tab.get("tabProperties", {})
                     if props.get("tabId") == tab_id:
                         target_tab = tab
                         break
+                    for child in tab.get("childTabs", []):
+                        if child.get("tabProperties", {}).get("tabId") == tab_id:
+                            target_tab = child
+                            break
 
-            # 3. Fallback — pehla tab
+            if not target_tab:
+                for tab in tabs:
+                    props = tab.get("tabProperties", {})
+                    title = props.get("title", "").strip().upper()
+                    if "ISSUE" in title:
+                        target_tab = tab
+                        break
+
             if not target_tab:
                 target_tab = tabs[0]
 
             tab_title = target_tab.get("tabProperties", {}).get("title", "Unknown")
             print(f"Reading from tab: '{tab_title}'")
 
-            # Sirf is tab ka text lo
             doc_tab = target_tab.get("documentTab", {})
             content = doc_tab.get("body", {}).get("content", [])
             for block in content:
                 for elem in block.get("paragraph", {}).get("elements", []):
                     all_text += elem.get("textRun", {}).get("content", "")
 
-            # Child tabs bhi is tab ke under hain toh lo
             for child in target_tab.get("childTabs", []):
                 child_content = child.get("documentTab", {}).get("body", {}).get("content", [])
                 for block in child_content:
@@ -1510,64 +1510,104 @@ def get_all_issues(doc_id=None, tab_id: str = None):
         print(f"Text preview:\n{all_text[:300]}")
 
         result = []
+        seen = set()
 
-        # Format 1: "Issue #5 [MODULE]" naya format
+        # ── Format 1: Naya format "Issue #12 [MODULE]\nTitle: ...\nStatus: ..." ──
         pattern1 = re.compile(
             r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
             r"Title:\s*(.+?)\s*\n"
-            r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)\s{2,}Created On:\s*(.+?)(?=\n─|\nIssue #|\Z)",
+            r".*?Status:\s*([\w ]+?)\s{2,}Priority:\s*(\w+)\s{2,}Created On:\s*(.+?)(?=\n─|\n═|\nIssue #|\Z)",
             re.DOTALL
         )
         for m in pattern1.finditer(all_text):
-            result.append({
-                "number":   int(m.group(1)),
-                "title":    m.group(2).strip(),
-                "status":   _normalize_status(m.group(3).strip()),
-                "priority": m.group(4).strip().lower(),
-                "created":  m.group(5).strip().split("\n")[0].strip(),
-            })
+            num = int(m.group(1))
+            if num not in seen:
+                seen.add(num)
+                result.append({
+                    "number":   num,
+                    "title":    m.group(2).strip(),
+                    "status":   _normalize_status(m.group(3).strip()),
+                    "priority": m.group(4).strip().lower(),
+                    "created":  m.group(5).strip().split("\n")[0].strip(),
+                })
 
-        # Format 2: "1. TITLE\n   ISSUE: desc"
-        if not result:
-            pattern2 = re.compile(
-                r"(\d+)\.\s+(.+?)\n\s+(?:ISSUE|FEATURE):\s+(.+?)(?=\n\d+\.|\Z)",
-                re.DOTALL
-            )
-            for m in pattern2.finditer(all_text):
-                title = m.group(2).strip()
-                if title:
+        # ── Format 2: Naya format without Status line ──
+        pattern1b = re.compile(
+            r"Issue #(\d+)(?:\s*\[[^\]]*\])?\s*\n"
+            r"Title:\s*(.+?)\s*\n",
+            re.DOTALL
+        )
+        for m in pattern1b.finditer(all_text):
+            num = int(m.group(1))
+            if num not in seen:
+                seen.add(num)
+                result.append({
+                    "number":   num,
+                    "title":    m.group(2).strip(),
+                    "status":   "open",
+                    "priority": "medium",
+                    "created":  "",
+                })
+
+        # ── Format 3: Bold numbered "12. TITLE IN CAPS" ──
+        # pattern2 = re.compile(
+        #     r"(\d+)\.\s+([A-Z][A-Z\s\-\/&,()]{3,})\n",
+        #     re.MULTILINE
+        # )
+        # for m in pattern2.finditer(all_text):
+        #     num = int(m.group(1))
+        #     title = m.group(2).strip()
+        #     if num not in seen and title and len(title) > 3:
+        #         seen.add(num)
+        #         result.append({
+        #             "number":   num,
+        #             "title":    title[:100],
+        #             "status":   "open",
+        #             "priority": "medium",
+        #             "created":  "",
+        #         })
+        # ── Format 3: "12. TITLE" — ALL CAPS ya mixed case dono ──
+        pattern2 = re.compile(
+            r"^(\d+)\.\s+(.{5,200})$",
+            re.MULTILINE
+        )
+        for m in pattern2.finditer(all_text):
+            num = int(m.group(1))
+            title = m.group(2).strip()
+            if num not in seen and title:
+                # Skip karo agar yeh metadata lines hain
+                skip_words = ["ISSUE:", "UPDATE:", "TYPE:", "STATUS:", "DESCRIPTION:", 
+                            "NOTE:", "Title:", "Type:", "Priority:", "Created"]
+                if not any(title.startswith(skip) for skip in skip_words):
+                    seen.add(num)
                     result.append({
-                        "number":   int(m.group(1)),
+                        "number":   num,
                         "title":    title[:100],
                         "status":   "open",
                         "priority": "medium",
                         "created":  "",
                     })
 
-        # Format 3: simple numbered list
-        if not result:
-            pattern3 = re.compile(r"^\s*(\d+)[.)]\s+(.{5,150})$", re.MULTILINE)
-            for m in pattern3.finditer(all_text):
-                title = m.group(2).strip()
-                if title and not title.upper().startswith("ISSUE:") and not title.upper().startswith("UPDATE:"):
+        # ── Format 4: Any numbered list fallback ──
+        pattern3 = re.compile(r"^\s*(\d+)[.)]\s+(.{5,150})$", re.MULTILINE)
+        for m in pattern3.finditer(all_text):
+            num = int(m.group(1))
+            title = m.group(2).strip()
+            if num not in seen and title:
+                if not any(skip in title.upper() for skip in ["ISSUE:", "UPDATE:", "TYPE:", "STATUS:", "DESCRIPTION:", "NOTE:"]):
+                    seen.add(num)
                     result.append({
-                        "number":   int(m.group(1)),
+                        "number":   num,
                         "title":    title[:100],
                         "status":   "open",
                         "priority": "medium",
                         "created":  "",
                     })
 
-        # Duplicates remove
-        seen = set()
-        unique = []
-        for issue in result:
-            if issue["number"] not in seen:
-                seen.add(issue["number"])
-                unique.append(issue)
-
-        print(f"✓ Found {len(unique)} issues")
-        return unique
+        # Sort by number
+        result.sort(key=lambda x: x["number"])
+        print(f"✓ Found {len(result)} issues")
+        return result
 
     except Exception as e:
         print(f"Doc fetch error: {e}")
