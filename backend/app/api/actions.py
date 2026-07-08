@@ -748,7 +748,7 @@ def execute_action(request: ExecuteRequest):
     # ── RESOLVE ───────────────────────────────────────────────────────────────
     elif action == "resolve_issue":
         if fields.issue_number:
-            result = resolve_issue(issue_number=fields.issue_number, doc_id=request.doc_id)
+            result = resolve_issue(issue_number=fields.issue_number, doc_id=request.doc_id, tab_id=request.tab_id )
 
             if "error" in result:
                 return ExecuteResponse(success=False, message=result["error"], error=result["error"])
