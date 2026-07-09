@@ -2107,37 +2107,83 @@ def create_issue(title, description, issue_type="issue", module=None,
 
     except Exception as e:
         return {"error": str(e)}
+def _find_status_range(doc, issue_number: int, tab_id: str = None):
+    content = _get_tab_content(doc, tab_id)
+    for block in content:
+        para = block.get("paragraph", {})
+        elements = para.get("elements", [])
+        full_text = "".join(e.get("textRun", {}).get("content", "") for e in elements)
+
+        if re.match(rf"^\s*{issue_number}\.\s+", full_text):
+            m = re.search(r"\[STATUS:\s*(\w+)\]", full_text)
+            if not m:
+                return None
+            block_start = block.get("startIndex", 0)
+            return block_start + m.start(1), block_start + m.end(1)
+    return None
     
+# def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
+#     """Status ko RESOLVED karo — issue delete nahi hoga."""
+#     if not doc_id:
+#         return {"error": "No Google Doc ID provided"}
+#     try:
+#         service = get_docs_service()
+#         doc     = get_document(doc_id)
+
+#         if not tab_id:
+#             tab_id = _get_tab_id(doc, "issues")
+
+#         rng = _find_status_range(doc, issue_number, tab_id)
+#         if not rng:
+#             return {"error": f"Issue #{issue_number} status tag not found"}
+
+#         start, end = rng
+
+#         delete_req = {"deleteContentRange": {"range": {"startIndex": start, "endIndex": end}}}
+#         insert_req = {"insertText": {"location": {"index": start}, "text": "RESOLVED"}}
+
+#         if tab_id:
+#             delete_req["deleteContentRange"]["range"]["tabId"] = tab_id
+#             insert_req["insertText"]["location"]["tabId"] = tab_id
+
+#         service.documents().batchUpdate(
+#             documentId=doc_id,
+#             body={"requests": [delete_req, insert_req]}
+#         ).execute()
+
+#         print(f"✓ Issue #{issue_number} marked RESOLVED")
+#         return {"issue_number": issue_number, "action": "resolved"}
+
+#     except Exception as e:
+#         return {"error": str(e)}
 def resolve_issue(issue_number, doc_id=None, tab_id: str = None):
-    """Status ko RESOLVED karo — issue delete nahi hoga."""
+    """Issue ko doc se delete karo."""
     if not doc_id:
         return {"error": "No Google Doc ID provided"}
     try:
-        service = get_docs_service()
-        doc     = get_document(doc_id)
+        service      = get_docs_service()
+        doc          = get_document(doc_id)
+        range_result = _find_issue_range(doc, issue_number, tab_id)
+        if not range_result:
+            return {"error": f"Issue #{issue_number} not found"}
 
-        if not tab_id:
-            tab_id = _get_tab_id(doc, "issues")
+        start, end = range_result
+        safe_end   = max(end - 1, start + 1)
 
-        rng = _find_status_range(doc, issue_number, tab_id)
-        if not rng:
-            return {"error": f"Issue #{issue_number} status tag not found"}
-
-        start, end = rng
-
-        delete_req = {"deleteContentRange": {"range": {"startIndex": start, "endIndex": end}}}
-        insert_req = {"insertText": {"location": {"index": start}, "text": "RESOLVED"}}
-
+        delete_req = {
+            "deleteContentRange": {
+                "range": {"startIndex": start, "endIndex": safe_end}
+            }
+        }
         if tab_id:
             delete_req["deleteContentRange"]["range"]["tabId"] = tab_id
-            insert_req["insertText"]["location"]["tabId"] = tab_id
 
         service.documents().batchUpdate(
             documentId=doc_id,
-            body={"requests": [delete_req, insert_req]}
+            body={"requests": [delete_req]}
         ).execute()
 
-        print(f"✓ Issue #{issue_number} marked RESOLVED")
+        print(f"✓ Issue #{issue_number} deleted from doc")
         return {"issue_number": issue_number, "action": "resolved"}
 
     except Exception as e:
