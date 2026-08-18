@@ -343,7 +343,7 @@ export default function PayrollPage() {
       {isAdmin && (
         <>
           {/* Stats */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 24 }}>
             {[
               { label: "Total Payroll", value: formatCurrency(totalPayroll), sub: "this cycle",      color: "var(--accent-purple)" },
               { label: "Generated",     value: String(generatedCount),       sub: "payslips",        color: "var(--accent-blue)"   },
@@ -432,7 +432,7 @@ export default function PayrollPage() {
               <p style={{ fontSize: 14 }}>No payslips available yet. Your HR will generate them each month.</p>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {/* History list */}
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 10 }}>Payslip History</div>

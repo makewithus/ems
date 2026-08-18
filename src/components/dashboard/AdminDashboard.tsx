@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   Users, Clock, UserX, CalendarDays, DollarSign,
-  FolderOpen, Cake, Megaphone, TrendingUp, TrendingDown,
+  FolderOpen, Cake, Megaphone,
   Check, X, Loader2,
 } from "lucide-react";
 import {
@@ -118,10 +118,11 @@ export default function AdminDashboard() {
       snap.docs.forEach((d) => {
         const s = d.data().status ?? "";
         if (s === "Present" || s === "Late") present++;
-        else if (s === "Absent") absent++;
       });
       setPresentCount(present);
-      setAbsentCount(absent);
+      // Wait to set absent count until employeeCount is ready (done in render or we just use employeeCount state)
+      // Actually, since employeeCount might change independently, we should just calculate absentCount in render.
+      // But we can set the explicit absent count here if we want, or just update the UI later.
     }, () => {});
     return () => unsub();
   }, []);
@@ -281,14 +282,13 @@ export default function AdminDashboard() {
   };
 
   const STATS = [
-    { label: "Total Employees",     value: String(employeeCount || 0), icon: Users,       color: "var(--accent-blue)",   delta: "Active & inactive employees", up: true  },
-    { label: "Present Today",       value: String(presentCount),        icon: Clock,       color: "var(--accent-green)",  delta: `${employeeCount ? Math.round(presentCount / employeeCount * 100) : 0}% attendance`, up: true  },
-    { label: "Absent Today",        value: String(absentCount),         icon: UserX,       color: "var(--accent-red)",    delta: "From attendance records", up: false },
-    { label: "Pending Leaves",      value: String(pendingCount),        icon: CalendarDays,color: "var(--accent-amber)",  delta: `${Math.min(pendingCount,4)} urgent`,      up: false },
-    { label: "Payroll This Month",  value: payrollTotal > 0 ? formatPayroll(payrollTotal) : "—", icon: DollarSign, color: "var(--accent-purple)", delta: new Date().toLocaleString("default", { month: "long" }), up: true },
-    { label: "Documents",           value: String(documentCount || 0),  icon: FolderOpen,  color: "var(--accent-blue)",   delta: "Total files",            up: true  },
-    { label: "Birthdays This Week", value: String(birthdayCount || 0),  icon: Cake,        color: "var(--accent-amber)",  delta: birthdayCount > 0 ? "Send wishes! 🎂" : "No birthdays", up: birthdayCount > 0 },
-    { label: "New Notices",         value: String(noticeCount || 0),    icon: Megaphone,   color: "var(--accent-red)",    delta: "This week",              up: false },
+    { label: "Total Employees",     value: String(employeeCount || 0), icon: Users,       color: "var(--accent-blue)",   delta: "Active & inactive employees" },
+    { label: "Today's Attendance",  value: `${presentCount}/${employeeCount || 1}`,     icon: Clock,       color: "var(--accent-green)",  delta: `${Math.max(0, employeeCount - presentCount)} absent or pending` },
+    { label: "Pending Leaves",      value: String(pendingLeaves.length || 0), icon: CalendarDays, color: "var(--accent-amber)",  delta: "Requires HR approval" },
+    { label: "Payroll This Month",  value: payrollTotal > 0 ? formatPayroll(payrollTotal) : "—", icon: DollarSign, color: "var(--accent-purple)", delta: new Date().toLocaleString("default", { month: "long" }) },
+    { label: "Documents",           value: String(documentCount || 0),  icon: FolderOpen,  color: "var(--accent-blue)",   delta: "Total files" },
+    { label: "Birthdays This Week", value: String(birthdayCount || 0),  icon: Cake,        color: "var(--accent-amber)",  delta: birthdayCount > 0 ? "Send wishes! 🎂" : "No birthdays" },
+    { label: "New Notices",         value: String(noticeCount || 0),    icon: Megaphone,   color: "var(--accent-red)",    delta: "This week" },
   ];
 
   return (
@@ -308,21 +308,20 @@ export default function AdminDashboard() {
       <div className="stats-grid" style={{ marginBottom: 24 }}>
         {STATS.map((s) => (
           <div key={s.label} className="card" style={{ padding: "16px 18px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: `${s.color}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: `${s.color}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <s.icon size={18} color={s.color} />
               </div>
-              {s.up ? <TrendingUp size={14} color="var(--accent-green)" /> : <TrendingDown size={14} color="var(--accent-red)" />}
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)" }}>{s.label}</div>
             </div>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1, marginBottom: 4 }}>{s.value}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 4 }}>{s.label}</div>
             <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.delta}</div>
           </div>
         ))}
       </div>
 
       {/* Charts Row 1 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
         {/* Attendance Trend */}
         <div className="card" style={{ padding: "20px 20px 12px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Weekly Attendance</div>
@@ -374,7 +373,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Charts Row 2 */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
         {/* Dept breakdown — live */}
         <div className="card" style={{ padding: "20px 20px 12px" }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Employees by Department</div>

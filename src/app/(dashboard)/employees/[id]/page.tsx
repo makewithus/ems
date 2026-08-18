@@ -1,16 +1,17 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Edit2, UserCheck, UserX, Mail, Phone,
   MapPin, Building2, Calendar, DollarSign, Loader2,
-  Save, X, ChevronDown, Eye, EyeOff,
+  Save, X, ChevronDown, Eye, EyeOff, CalendarClock,
 } from "lucide-react";
 import { formatDate, getInitials, formatCurrency, EMPLOYMENT_TYPES } from "@/lib/utils";
 import { useDepartments } from "@/hooks/useDepartments";
 import { db } from "@/lib/firebase";
 import {
-  doc, getDoc, updateDoc, serverTimestamp
+  doc, getDoc, updateDoc, serverTimestamp,
+  collection, query, where, getDocs,
 } from "firebase/firestore";
 import { updateEmployeeAuth } from "@/lib/firebase-secondary";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ type Emp = {
   joiningDate: string;
   employmentType: string;
   salary: number;
+  salaryDate: string;
   status: string;
   password?: string;
 };
@@ -100,6 +102,7 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
         joiningDate:    form.joiningDate,
         employmentType: form.employmentType,
         salary:         Number(form.salary),
+        salaryDate:     form.salaryDate,
         employeeId:     form.employeeId,
         password:       passwordToSave,
         updatedAt:      serverTimestamp(),
@@ -191,6 +194,7 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
           <Field label="Department"       field="department" options={departments} />
           <Field label="Employment Type"  field="employmentType" options={[...EMPLOYMENT_TYPES]} />
           <Field label="Salary (₹)"       field="salary" type="number" />
+          <Field label="Salary Date"      field="salaryDate" type="date" />
           <Field label="Date of Birth"    field="dob" type="date" />
           <Field label="Joining Date"     field="joiningDate" type="date" />
           <Field label="Gender"           field="gender" options={["Male", "Female", "Other", "Prefer not to say"]} />
@@ -287,6 +291,111 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
   );
 }
 
+/* ── Adjusted Payment Date Card ──────────────────────────── */
+function AdjustedPaymentCard({ employeeId, salaryDate }: { employeeId: string; salaryDate: string }) {
+  const [absentCount, setAbsentCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const prefix = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+
+  useEffect(() => {
+    if (!employeeId) return;
+    const fetchAbsent = async () => {
+      setLoading(true);
+      try {
+        const q = query(
+          collection(db, "attendance"),
+          where("employeeId", "==", employeeId),
+          where("status", "==", "Absent")
+        );
+        const snap = await getDocs(q);
+        const count = snap.docs.filter(d => {
+          const date = d.data().date ?? "";
+          return date.startsWith(prefix);
+        }).length;
+        setAbsentCount(count);
+      } catch {
+        setAbsentCount(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAbsent();
+  }, [employeeId, prefix]);
+
+  const adjustedDate = useMemo(() => {
+    if (!salaryDate) return null;
+    try {
+      const base = new Date(salaryDate);
+      if (isNaN(base.getTime())) return null;
+      // Use the salary date's day-of-month in the current month/year
+      const payDate = new Date(currentYear, currentMonth, base.getDate());
+      payDate.setDate(payDate.getDate() + absentCount);
+      return payDate;
+    } catch {
+      return null;
+    }
+  }, [salaryDate, absentCount, currentMonth, currentYear]);
+
+  if (loading) return null;
+  if (!adjustedDate) return null;
+
+  const baseDayOfMonth = new Date(salaryDate).getDate();
+
+  return (
+    <div className="card" style={{
+      marginTop: 12, padding: "16px 20px",
+      background: absentCount > 0 ? "rgba(239,68,68,0.06)" : "rgba(34,197,94,0.06)",
+      border: `1px solid ${absentCount > 0 ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <CalendarClock size={16} color={absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)"} />
+        <div style={{ fontSize: 13, fontWeight: 700 }}>Adjusted Payment Date</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 3 }}>
+            Base Salary Day
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{baseDayOfMonth}{getOrdinal(baseDayOfMonth)} of month</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 3 }}>
+            Absent Days ({MONTHS_SHORT[currentMonth]})
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)" }}>
+            {absentCount} day{absentCount !== 1 ? "s" : ""}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 3 }}>
+            Adjusted Date
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)" }}>
+            {adjustedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+          </div>
+        </div>
+      </div>
+      {absentCount > 0 && (
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, fontStyle: "italic" }}>
+          Payment date shifted by +{absentCount} day{absentCount !== 1 ? "s" : ""} due to absences in {MONTHS_SHORT[currentMonth]}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function getOrdinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
 /* ── Main page ────────────────────────────────────────────── */
 export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>();
@@ -322,6 +431,7 @@ export default function EmployeeProfilePage() {
           joiningDate:    d.joiningDate    ?? "",
           employmentType: d.employmentType ?? "Full-time",
           salary:         d.salary         ?? 0,
+          salaryDate:     d.salaryDate     ?? "",
           status:         d.status         ?? "Active",
           password:       d.password       ?? "",
         });
@@ -497,22 +607,26 @@ export default function EmployeeProfilePage() {
 
           {/* Tab content */}
           {tab === "Overview" && (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {[
-                ["Employment Type", emp.employmentType],
-                ["Gender",          emp.gender || "—"],
-                ["Date of Birth",   emp.dob ? formatDate(emp.dob) : "—"],
-                ["Work Email",      emp.email],
-                ["Department",      emp.department],
-                ["Designation",     emp.designation],
-                ["Joining Date",    emp.joiningDate ? formatDate(emp.joiningDate) : "—"],
-                ["Monthly Salary",  formatCurrency(emp.salary)],
-              ].map(([l, v]) => (
-                <div key={l} className="card" style={{ padding: "14px 16px" }}>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>{l}</div>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>{v}</div>
-                </div>
-              ))}
+            <div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {[
+                  ["Employment Type", emp.employmentType],
+                  ["Gender",          emp.gender || "—"],
+                  ["Date of Birth",   emp.dob ? formatDate(emp.dob) : "—"],
+                  ["Work Email",      emp.email],
+                  ["Department",      emp.department],
+                  ["Designation",     emp.designation],
+                  ["Joining Date",    emp.joiningDate ? formatDate(emp.joiningDate) : "—"],
+                  ["Monthly Salary",  formatCurrency(emp.salary)],
+                  ["Salary Date",     emp.salaryDate ? formatDate(emp.salaryDate) : "—"],
+                ].map(([l, v]) => (
+                  <div key={l} className="card" style={{ padding: "14px 16px" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>{l}</div>
+                    <div style={{ fontSize: 14, fontWeight: 500 }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {emp.salaryDate && <AdjustedPaymentCard employeeId={emp.employeeId} salaryDate={emp.salaryDate} />}
             </div>
           )}
 

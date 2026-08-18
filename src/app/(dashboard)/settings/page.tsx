@@ -165,7 +165,7 @@ function CompanySettingsContent({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div>
       <h2 style={{ fontSize:16,fontWeight:700,marginBottom:16 }}>Company Details</h2>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(240px, 1fr))",gap:16,marginBottom:20 }}>
         {[
           { label:"Company Name",    k:"name",      type:"text",  ph:"MakeWithUs Pvt Ltd" },
           { label:"Corporate Email", k:"email",     type:"email", ph:"hr@company.com" },
@@ -199,7 +199,7 @@ function PayrollRulesContent() {
   return (
     <div>
       <h2 style={{ fontSize:16,fontWeight:700,marginBottom:16 }}>Payroll Rules</h2>
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:16,marginBottom:20 }}>
         {[{label:"PF Contribution (%)",id:"pr-pf",def:"12"},{label:"Professional Tax (monthly ₹)",id:"pr-pt",def:"200"},{label:"TDS Rate (%)",id:"pr-tds",def:"10"},{label:"Salary Day of Month",id:"pr-day",def:"1"}].map((f)=>(
           <div key={f.id}><label style={{ fontSize:13,color:"var(--text-secondary)",display:"block",marginBottom:6 }}>{f.label}</label><input id={f.id} className="input-base" type="number" defaultValue={f.def}/></div>
         ))}
@@ -236,6 +236,7 @@ function ThemeContent() {
 function PersonalInfoContent() {
   const { profile, user } = useAuthStore();
   const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
   const [empData, setEmpData] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -267,6 +268,7 @@ function PersonalInfoContent() {
                 employmentType: d.employmentType ?? "",
               });
               setPhone(userData.phone || d.phone || "");
+              setDob(d.dob || "");
             }
             setLoadingEmp(false);
           })
@@ -286,7 +288,7 @@ function PersonalInfoContent() {
         try {
           const snap = await getDocs(q(col(db, "employees"), w("employeeId", "==", employeeId), w("uid", "==", user.uid)));
           if (!snap.empty) {
-            await updateDoc(fsDoc(db, "employees", snap.docs[0].id), { phone, updatedAt: sts() });
+            await updateDoc(fsDoc(db, "employees", snap.docs[0].id), { phone, dob, updatedAt: sts() });
           }
         } catch (err) {
           console.warn("Direct update on employees doc restricted by Firestore security rules, falling back to users doc:", err);
@@ -296,7 +298,7 @@ function PersonalInfoContent() {
       // Always update the users collection which is fully writable by the owner.
       if (user?.uid) {
         const { doc: fsDoc2, updateDoc: upDoc } = await import("firebase/firestore");
-        await upDoc(fsDoc2(db, "users", user.uid), { phone, updatedAt: sts() });
+        await upDoc(fsDoc2(db, "users", user.uid), { phone, dob, updatedAt: sts() });
       }
       
       toast.success("Profile updated!");
@@ -337,22 +339,33 @@ function PersonalInfoContent() {
             <Row label="Designation"      value={empData.designation} />
             <Row label="Employment Type"  value={empData.employmentType} />
             <Row label="Joining Date"     value={empData.joiningDate} />
-            <Row label="Date of Birth"    value={empData.dob} />
             <Row label="Gender"           value={empData.gender} />
           </div>
 
-          {/* Editable field: Phone */}
-          <div style={{ marginBottom: 20 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Update Contact</h3>
-            <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Phone Number</label>
-            <input
-              className="input-base"
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+91 XXXXX XXXXX"
-              style={{ maxWidth: 280 }}
-            />
+          <div style={{ marginBottom: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Contact</h3>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Phone Number</label>
+              <input
+                className="input-base"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 XXXXX XXXXX"
+                style={{ width: "100%" }}
+              />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Personal</h3>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Date of Birth</label>
+              <input
+                className="input-base"
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
           </div>
 
           <button className="btn btn-primary" style={{ gap: 6 }} onClick={handleSave} disabled={saving}>
@@ -381,7 +394,6 @@ export default function SettingsPage() {
     { id:"leavePolicy", label:"Leave Policy",         icon:CalendarDays, show:isAdmin },
     { id:"payrollRules",label:"Payroll Rules",        icon:DollarSign,   show:isAdmin },
     { id:"emailConfig", label:"Email Configuration",  icon:Mail,         show:isAdmin },
-    { id:"themeConfig", label:"Theme Options",        icon:Palette,      show:true },
   ];
   const visibleTabs = allTabs.filter((t) => t.show);
 
@@ -443,7 +455,7 @@ export default function SettingsPage() {
           {activeTab === "emailConfig" && isAdmin && (
             <div>
               <h2 style={{ fontSize:16,fontWeight:700,marginBottom:16 }}>Email Configuration</h2>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:16,marginBottom:20 }}>
                 {[{label:"SMTP Host",id:"em-host",def:"smtp.gmail.com",type:"text"},{label:"SMTP Port",id:"em-port",def:"587",type:"number"},{label:"Sender Email",id:"em-from",def:"hr@company.com",type:"email"},{label:"Sender Name",id:"em-name",def:"HR Team",type:"text"}].map((f)=>(
                   <div key={f.id}><label style={{ fontSize:13,color:"var(--text-secondary)",display:"block",marginBottom:6 }}>{f.label}</label><input id={f.id} className="input-base" type={f.type} defaultValue={f.def}/></div>
                 ))}
@@ -451,7 +463,6 @@ export default function SettingsPage() {
               <button className="btn btn-primary" style={{ gap:6 }} onClick={()=>toast.success("Email configuration saved!")}><Save size={14}/>Save Config</button>
             </div>
           )}
-          {activeTab === "themeConfig" && <ThemeContent />}
         </div>
       </div>
     </div>

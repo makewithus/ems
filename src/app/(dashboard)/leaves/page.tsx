@@ -34,12 +34,6 @@ const STATUS_BG: Record<string, string> = {
   Cancelled:"rgba(255,255,255,0.06)",
 };
 
-const BALANCE = [
-  { type: "Casual",    total: 12, used: 6 },
-  { type: "Medical",   total: 10, used: 5 },
-  { type: "Paid",      total: 15, used: 3 },
-  { type: "Emergency", total: 5,  used: 2 },
-];
 
 type LeaveRow = {
   id: string;
@@ -144,14 +138,57 @@ export default function LeavesPage() {
   /* ── Approve / Reject (admin) — updates Firestore ── */
   const handleAction = async (id: string, status: "Approved" | "Rejected") => {
     try {
-      await updateDoc(doc(db, "leaveRequests", id), {
+      const { getDoc, setDoc, doc: fsDoc } = await import("firebase/firestore");
+      
+      const leaveRef = fsDoc(db, "leaveRequests", id);
+      const leaveSnap = await getDoc(leaveRef);
+      
+      if (!leaveSnap.exists()) {
+        toast.error("Leave request not found.");
+        return;
+      }
+      
+      const leaveData = leaveSnap.data();
+
+      await updateDoc(leaveRef, {
         status,
         reviewedBy: profile?.displayName ?? "Admin",
         reviewedAt: serverTimestamp(),
         updatedAt:  serverTimestamp(),
       });
+
+      // If approved, insert attendance records for the dates
+      if (status === "Approved" && leaveData.startDate && leaveData.endDate && leaveData.employeeId) {
+        const start = new Date(leaveData.startDate);
+        const end = new Date(leaveData.endDate);
+        const empId = leaveData.employeeId;
+        const empName = leaveData.employeeName ?? "Employee";
+        const dept = leaveData.department ?? "";
+
+        const current = new Date(start);
+        while (current <= end) {
+          const dateStr = current.toISOString().split("T")[0];
+          const attRef = fsDoc(db, "attendance", `${empId}_${dateStr}`);
+          
+          await setDoc(attRef, {
+            employeeId: empId,
+            employeeName: empName,
+            department: dept,
+            date: dateStr,
+            status: "Holiday",
+            notes: `${leaveData.leaveType || "Approved"} Leave`,
+            manuallyMarked: true,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          }, { merge: true }); // Use merge in case they clocked in previously
+          
+          current.setDate(current.getDate() + 1);
+        }
+      }
+
       toast.success(`Leave request ${status.toLowerCase()} successfully!`);
-    } catch {
+    } catch (err) {
+      console.error(err);
       toast.error("Failed to update leave request.");
     }
   };
@@ -193,23 +230,6 @@ export default function LeavesPage() {
         </div>
       )}
 
-      {/* Employee Leave Balance */}
-      {!isAdmin && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 24 }}>
-          {BALANCE.map((b) => (
-            <div key={b.type} className="card" style={{ padding: "14px 16px" }}>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>{b.type} Leave</div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>{b.total - b.used}</span>
-                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{b.used}/{b.total} used</span>
-              </div>
-              <div style={{ height: 4, borderRadius: 2, background: "var(--bg-elevated)" }}>
-                <div style={{ height: "100%", width: `${(b.used / b.total) * 100}%`, background: "var(--accent-blue)", borderRadius: 2 }} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Apply form */}
       {showForm && (

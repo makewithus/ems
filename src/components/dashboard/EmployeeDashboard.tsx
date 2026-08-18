@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { Clock, CalendarDays, DollarSign, Flame, Play, RefreshCw, Square, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, CalendarDays, DollarSign, Flame, Play, RefreshCw, Square, Loader2, ChevronLeft, ChevronRight, CalendarClock } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
@@ -9,6 +9,7 @@ import { useEmployeeAttendance, recordClockIn, recordClockOut } from "@/hooks/us
 import { db } from "@/lib/firebase";
 import {
   collection, query, where, onSnapshot, orderBy, limit,
+  doc, getDoc,
 } from "firebase/firestore";
 import { formatCurrency } from "@/lib/utils";
 
@@ -78,6 +79,66 @@ export default function EmployeeDashboard() {
     });
     return map;
   }, [empRecords]);
+
+  // Employee data state
+  const [salaryDate, setSalaryDate] = useState<string>("");
+  const [joiningDate, setJoiningDate] = useState<string>("");
+
+  // Fetch salary date from employee record
+  useEffect(() => {
+    if (!employeeId) return;
+    // Find employee doc by employeeId field
+    const empQuery = query(collection(db, "employees"), where("employeeId", "==", employeeId), limit(1));
+    const unsub = onSnapshot(empQuery, (snap) => {
+      if (!snap.empty) {
+        setSalaryDate(snap.docs[0].data().salaryDate ?? "");
+        setJoiningDate(snap.docs[0].data().joiningDate ?? "");
+      }
+    }, () => {});
+    return () => unsub();
+  }, [employeeId]);
+
+  // Compute adjusted payment date
+  const paymentInfo = useMemo(() => {
+    if (!salaryDate) return null;
+    const now = new Date();
+    const cMonth = now.getMonth();
+    const cYear = now.getFullYear();
+    
+    let absentCount = 0;
+    const startOfMonth = new Date(cYear, cMonth, 1);
+    const joinDateObj = joiningDate ? new Date(joiningDate) : new Date(0);
+    const startCountDate = startOfMonth > joinDateObj ? startOfMonth : joinDateObj;
+    
+    const endCountDate = new Date(cYear, cMonth, now.getDate()); // up to yesterday (since <)
+
+    let current = new Date(startCountDate);
+    while (current < endCountDate) {
+      const isWeekend = current.getDay() === 0 || current.getDay() === 6;
+      if (!isWeekend) {
+        const dStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+        const rec = recordsMap[dStr];
+        if (!rec || rec.status === "Absent") {
+          absentCount++;
+        }
+      }
+      current.setDate(current.getDate() + 1);
+    }
+
+    try {
+      const base = new Date(salaryDate);
+      if (isNaN(base.getTime())) return null;
+      const payDate = new Date(cYear, cMonth, base.getDate());
+      payDate.setDate(payDate.getDate() + absentCount);
+      return {
+        baseDayOfMonth: base.getDate(),
+        absentCount,
+        adjustedDate: payDate,
+      };
+    } catch {
+      return null;
+    }
+  }, [salaryDate, joiningDate, recordsMap]);
 
   // Selected date details
   const selectedRecord = useMemo(() => {
@@ -296,6 +357,19 @@ export default function EmployeeDashboard() {
         : "No payslip yet",
     },
     {
+      label: "Payment Date",
+      value: paymentInfo
+        ? paymentInfo.adjustedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+        : salaryDate
+          ? new Date(salaryDate).getDate() + "th"
+          : "—",
+      icon: CalendarClock,
+      color: paymentInfo && paymentInfo.absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)",
+      sub: paymentInfo && paymentInfo.absentCount > 0
+        ? `Shifted +${paymentInfo.absentCount} day${paymentInfo.absentCount !== 1 ? "s" : ""} (absences)`
+        : salaryDate ? "No absences — on schedule" : "No salary date set",
+    },
+    {
       label: "Notices",
       value: String(notices.length),
       icon: CalendarDays,
@@ -320,19 +394,19 @@ export default function EmployeeDashboard() {
       <div className="stats-grid" style={{ marginBottom: 24 }}>
         {STATS.map((s) => (
           <div key={s.label} className="card" style={{ padding: "16px 18px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: `${s.color}18`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: `${s.color}18`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <s.icon size={18} color={s.color} />
               </div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)" }}>{s.label}</div>
             </div>
             <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginBottom: 3 }}>{s.value}</div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text-secondary)", marginBottom: 3 }}>{s.label}</div>
             <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{s.sub}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16, marginBottom: 16 }}>
         {/* Clock In/Out Widget */}
         <div className="card" style={{ padding: 20 }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Attendance — Today</div>
@@ -341,7 +415,7 @@ export default function EmployeeDashboard() {
               <Loader2 size={14} className="animate-spin" /> Loading…
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 16 }}>
               {[
                 { label: "Clock In",  value: todayRecord?.clockIn  ? fmt24to12(todayRecord.clockIn)  : "—", color: hasClockedIn  ? "var(--accent-green)" : "var(--text-muted)" },
                 { label: "Clock Out", value: todayRecord?.clockOut ? fmt24to12(todayRecord.clockOut) : "—", color: hasClockedOut ? "var(--accent-blue)"  : "var(--text-muted)" },
@@ -429,16 +503,30 @@ export default function EmployeeDashboard() {
 
           {/* Calendar Grid */}
           <div style={{ marginBottom: 16 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4, marginBottom: 8, textAlign: "center" }}>
+            {/* Day Headers */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1, marginBottom: 1 }}>
               {DAYS.map((d) => (
-                <div key={d} style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.05em" }}>
-                  {d.toUpperCase()}
+                <div key={d} style={{
+                  fontSize: 10, fontWeight: 700, color: "var(--text-muted)",
+                  letterSpacing: "0.06em", textTransform: "uppercase", textAlign: "center",
+                  padding: "8px 0",
+                  background: "rgba(255,255,255,0.03)",
+                  borderBottom: "2px solid var(--border)",
+                }}>
+                  {d}
                 </div>
               ))}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+
+            {/* Day Cells */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1 }}>
               {calendarCells.map((cellDay, idx) => {
-                if (cellDay === null) return <div key={`empty-${idx}`} />;
+                if (cellDay === null) return (
+                  <div key={`empty-${idx}`} style={{
+                    minHeight: 48, background: "rgba(255,255,255,0.01)",
+                    borderBottom: "1px solid var(--border)",
+                  }} />
+                );
                 
                 const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, "0")}-${String(cellDay).padStart(2, "0")}`;
                 const isSelected = selectedCalendarDate === dateStr;
@@ -446,64 +534,77 @@ export default function EmployeeDashboard() {
                 const isWeekend = cellDate.getDay() === 0 || cellDate.getDay() === 6;
                 const isFuture = cellDate > today;
                 const isToday = dateStr === todayStr;
+                const isBeforeJoin = joiningDate ? dateStr < joiningDate : false;
                 const rec = recordsMap[dateStr];
 
                 let bg = "var(--bg-secondary)";
                 let color = "var(--text-primary)";
-                let border = "1px solid var(--border)";
+                let statusLabel = "";
+                let statusDotColor = "";
                 let title = "No record";
 
                 if (isFuture) {
-                  bg = "transparent";
+                  bg = "rgba(255,255,255,0.02)";
                   color = "var(--text-muted)";
-                  border = "1px solid transparent";
                   title = "Future date";
+                  statusLabel = "";
+                } else if (isBeforeJoin) {
+                  bg = "rgba(255,255,255,0.02)";
+                  color = "var(--text-muted)";
+                  title = "Not joined yet";
+                  statusLabel = "";
                 } else if (rec) {
                   const hours = parseHours(rec.hoursWorked);
                   const status = rec.status;
                   if (status === "Present" || status === "Late") {
                     if (hours >= 8) {
-                      bg = "rgba(30, 158, 85, 0.25)";
+                      bg = "rgba(30, 158, 85, 0.18)";
                       color = "var(--accent-green)";
-                      border = "1px solid var(--accent-green)";
-                      title = `${status} (${rec.hoursWorked})`;
                     } else if (hours >= 5) {
-                      bg = "rgba(30, 158, 85, 0.12)";
+                      bg = "rgba(30, 158, 85, 0.10)";
                       color = "var(--accent-green)";
-                      border = "1px solid rgba(30, 158, 85, 0.4)";
-                      title = `${status} (${rec.hoursWorked})`;
                     } else {
-                      bg = "rgba(217, 140, 0, 0.12)";
+                      bg = "rgba(217, 140, 0, 0.10)";
                       color = "var(--accent-amber)";
-                      border = "1px solid rgba(217, 140, 0, 0.4)";
-                      title = `${status} (${rec.hoursWorked})`;
                     }
+                    title = `${status} (${rec.hoursWorked})`;
+                    statusLabel = status;
+                    statusDotColor = color;
                   } else if (status === "Half Day") {
-                    bg = "rgba(217, 140, 0, 0.12)";
+                    bg = "rgba(217, 140, 0, 0.10)";
                     color = "var(--accent-amber)";
-                    border = "1px solid var(--accent-amber)";
                     title = `Half Day (${rec.hoursWorked})`;
+                    statusLabel = "Half";
+                    statusDotColor = color;
                   } else if (status === "Absent") {
-                    bg = "rgba(255, 49, 49, 0.12)";
+                    bg = "rgba(255, 49, 49, 0.10)";
                     color = "var(--accent-red)";
-                    border = "1px solid var(--accent-red)";
                     title = "Absent";
+                    statusLabel = "Absent";
+                    statusDotColor = color;
                   } else if (status === "Holiday") {
                     bg = "var(--accent-purple-dim)";
-                    color = "var(--text-primary)";
-                    border = "1px solid var(--border)";
+                    color = "var(--accent-purple)";
                     title = "Holiday";
+                    statusLabel = "Holiday";
+                    statusDotColor = color;
                   }
                 } else if (isWeekend) {
-                  bg = "var(--bg-secondary)";
+                  bg = "rgba(255,255,255,0.02)";
                   color = "var(--text-muted)";
-                  border = "1px solid var(--border)";
                   title = "Weekend";
+                  statusLabel = "";
+                } else if (isToday) {
+                  bg = "var(--bg-secondary)";
+                  color = "var(--text-secondary)";
+                  title = "Today (No activity yet)";
+                  statusLabel = "Pending";
                 } else {
-                  bg = "rgba(255, 49, 49, 0.05)";
+                  bg = "rgba(255, 49, 49, 0.04)";
                   color = "var(--accent-red)";
-                  border = "1px solid rgba(255, 49, 49, 0.2)";
                   title = "Absent (No activity)";
+                  statusLabel = "N/A";
+                  statusDotColor = "var(--accent-red)";
                 }
 
                 return (
@@ -512,30 +613,62 @@ export default function EmployeeDashboard() {
                     title={title}
                     disabled={isFuture}
                     style={{
-                      aspectRatio: "1",
-                      borderRadius: "var(--radius-sm)",
+                      minHeight: 48,
+                      padding: "5px 6px",
                       display: "flex",
                       flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 12,
-                      fontWeight: isToday ? 700 : 500,
-                      background: bg,
+                      alignItems: "flex-start",
+                      justifyContent: "space-between",
+                      background: isSelected ? "rgba(255,255,255,0.08)" : bg,
                       color: color,
-                      border: isSelected ? "2.5px solid var(--text-primary)" : (isToday ? "2px solid var(--brand-red)" : border),
+                      borderBottom: "1px solid var(--border)",
+                      borderRight: "1px solid rgba(255,255,255,0.04)",
+                      borderTop: "none",
+                      borderLeft: isSelected ? "3px solid var(--text-primary)" : isToday ? "3px solid var(--brand-red)" : "3px solid transparent",
                       cursor: isFuture ? "default" : "pointer",
-                      position: "relative",
-                      transition: "transform 0.1s, border-color 0.1s",
-                      padding: 0,
+                      transition: "background 0.12s, border-color 0.12s",
+                      opacity: isFuture ? 0.65 : 1,
+                      borderRadius: 0,
                     }}
                     onClick={() => {
                       if (!isFuture) setSelectedCalendarDate(dateStr);
                     }}
                   >
-                    {cellDay}
+                    <span style={{
+                      fontSize: 12, fontWeight: isToday ? 800 : 600,
+                      color: isToday ? "var(--brand-red)" : color,
+                      lineHeight: 1,
+                    }}>{cellDay}</span>
+                    {statusLabel && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 3 }}>
+                        <span style={{
+                          width: 5, height: 5, borderRadius: "50%",
+                          background: statusDotColor, flexShrink: 0,
+                        }} />
+                        <span style={{
+                          fontSize: 8, fontWeight: 600, color: statusDotColor,
+                          letterSpacing: "0.02em", lineHeight: 1,
+                        }}>{statusLabel}</span>
+                      </div>
+                    )}
                   </button>
                 );
               })}
+            </div>
+
+            {/* Legend */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, padding: "8px 0", borderTop: "1px solid var(--border)" }}>
+              {[
+                { color: "var(--accent-green)", label: "Present" },
+                { color: "var(--accent-red)", label: "Absent" },
+                { color: "var(--accent-amber)", label: "Half Day" },
+                { color: "var(--accent-purple)", label: "Holiday" },
+              ].map((l) => (
+                <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--text-secondary)" }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: l.color, opacity: 0.5, flexShrink: 0 }} />
+                  <span>{l.label}</span>
+                </div>
+              ))}
             </div>
           </div>
 

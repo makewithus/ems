@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/store/auth.store";
 import Sidebar from "@/components/layout/Sidebar";
@@ -65,6 +65,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     });
     return () => unsub();
   }, [user, role, router]);
+
+  /* ── Client-side admin route guard ──
+     Double protection: if an employee reaches an admin-only route
+     (e.g. via browser back/forward or URL manipulation), redirect them. */
+  const pathname = usePathname();
+  const ADMIN_ONLY_CLIENT = ["/employees", "/reports", "/documents", "/issues", "/employer"];
+
+  useEffect(() => {
+    if (!role || !initialized) return;
+    const isEmployee = role === "employee";
+    const onAdminRoute = ADMIN_ONLY_CLIENT.some((p) => pathname.startsWith(p));
+    if (isEmployee && onAdminRoute) {
+      router.replace("/dashboard");
+    }
+  }, [role, pathname, initialized, router]);
 
   const showSpinner = !user && !initialized && !timedOut;
   if (showSpinner) {

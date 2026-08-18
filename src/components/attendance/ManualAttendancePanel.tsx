@@ -4,10 +4,10 @@ import {
   ChevronLeft, ChevronRight, Users, CheckCircle2,
   XCircle, Clock, AlertCircle, X, Save, Loader2,
   CalendarDays, PenLine, RotateCcw, Search,
-  UserCheck, ListChecks, Pencil,
+  UserCheck, ListChecks, Pencil, CalendarClock,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { toast } from "sonner";
 import {
   useEmployeeAttendance,
@@ -25,6 +25,12 @@ const MONTHS = [
 ];
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
+function getOrdinalSuffix(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return s[(v - 20) % 10] || s[v] || s[0];
+}
+
 const STATUS_OPTIONS: { value: StatusType; label: string; color: string; bg: string }[] = [
   { value: "Present",  label: "Present",  color: "var(--accent-green)",  bg: "var(--accent-green-dim)"  },
   { value: "Absent",   label: "Absent",   color: "var(--accent-red)",    bg: "var(--accent-red-dim)"    },
@@ -34,7 +40,7 @@ const STATUS_OPTIONS: { value: StatusType; label: string; color: string; bg: str
 ];
 
 function getDayStyle(status: string | undefined, isWeekend: boolean, isFuture: boolean) {
-  if (isFuture)  return { bg: "transparent", color: "rgba(255,255,255,0.2)", border: "1px dashed rgba(255,255,255,0.08)" };
+  if (isFuture)  return { bg: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.45)", border: "1px solid rgba(255,255,255,0.06)" };
   if (!status) {
     if (isWeekend) return { bg: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.35)", border: "1px solid rgba(255,255,255,0.08)" };
     // Not marked — clearly visible grey
@@ -337,34 +343,46 @@ function InteractiveCalendar({
       )}
 
       {/* Tap hint bar */}
-      <div style={{ display:"flex", gap:12, alignItems:"center", padding:"8px 12px", marginBottom:10, borderRadius:"var(--radius-sm)", background:"rgba(255,255,255,0.04)", border:"1px solid var(--border)", fontSize:11, color:"var(--text-muted)", flexWrap:"wrap" }}>
-        <span style={{ display:"flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:10, height:10, borderRadius:"50%", background:"#4ade80", flexShrink:0 }} />
-          <strong style={{ color:"var(--text-secondary)" }}>Single tap</strong> → Present
+      <div style={{ display:"flex", gap:16, alignItems:"center", padding:"10px 16px", marginBottom:14, borderRadius:"var(--radius-sm)", background:"rgba(255,255,255,0.03)", border:"1px solid var(--border)", fontSize:11, color:"var(--text-muted)", flexWrap:"wrap" }}>
+        <span style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ width:10, height:10, borderRadius:3, background:"rgba(34,197,94,0.28)", border:"1px solid rgba(34,197,94,0.6)", flexShrink:0 }} />
+          <strong style={{ color:"var(--text-secondary)" }}>Click</strong> → Present
         </span>
-        <span style={{ opacity:0.4 }}>|</span>
-        <span style={{ display:"flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:10, height:10, borderRadius:"50%", background:"#f87171", flexShrink:0 }} />
-          <strong style={{ color:"var(--text-secondary)" }}>Double tap</strong> → Absent
+        <span style={{ opacity:0.3 }}>│</span>
+        <span style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ width:10, height:10, borderRadius:3, background:"rgba(239,68,68,0.28)", border:"1px solid rgba(239,68,68,0.6)", flexShrink:0 }} />
+          <strong style={{ color:"var(--text-secondary)" }}>Double-click</strong> → Absent
         </span>
-        <span style={{ opacity:0.4 }}>|</span>
-        <span style={{ display:"flex", alignItems:"center", gap:5 }}>
-          <Pencil size={9} />
-          <strong style={{ color:"var(--text-secondary)" }}>Pencil</strong> → Edit
+        <span style={{ opacity:0.3 }}>│</span>
+        <span style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <Pencil size={10} />
+          <strong style={{ color:"var(--text-secondary)" }}>Pencil icon</strong> → Edit details
         </span>
       </div>
 
       {/* Day headers */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:2, marginBottom:3 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:1, marginBottom:1 }}>
         {DAYS.map((d) => (
-          <div key={d} style={{ textAlign:"center", fontSize:9, fontWeight:700, color:"var(--text-muted)", letterSpacing:"0.03em", padding:"2px 0" }}>{d.slice(0,1)}</div>
+          <div key={d} style={{
+            textAlign:"center", fontSize:11, fontWeight:700,
+            color:"var(--text-muted)", letterSpacing:"0.06em",
+            padding:"8px 0",
+            background:"rgba(255,255,255,0.03)",
+            borderBottom:"2px solid var(--border)",
+            textTransform:"uppercase",
+          }}>{d}</div>
         ))}
       </div>
 
-      {/* Day cells */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:2 }}>
+      {/* Day cells — professional table grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:1 }}>
         {cells.map((day, idx) => {
-          if (!day) return <div key={idx} />;
+          if (!day) return (
+            <div key={idx} style={{
+              minHeight:52, background:"rgba(255,255,255,0.01)",
+              borderBottom:"1px solid var(--border)",
+            }} />
+          );
           const dateStr   = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
           const isToday   = dateStr === todayStr;
           const isFuture  = dateStr > todayStr;
@@ -373,13 +391,15 @@ function InteractiveCalendar({
           const rec       = statusMap[dateStr];
           const isErr     = !!errored[dateStr];
 
-          // Use optimistic status for instant visual, fall back to real record
           const displayStatus = optimistic[dateStr] ?? rec?.status;
           const sty = getDayStyle(
-            isErr ? undefined : displayStatus,   // red shake: show as unmarked briefly
+            isErr ? undefined : displayStatus,
             isWeekend,
             isFuture
           );
+
+          // Status label text
+          const statusLabel = displayStatus ?? (isFuture ? "" : isWeekend ? "" : "N/A");
 
           return (
             <div
@@ -387,72 +407,94 @@ function InteractiveCalendar({
               onClick={() => !isFuture && handleTap(dateStr)}
               title={
                 isFuture ? "Future date"
-                : isWeekend ? "Weekend — tap to mark"
+                : isWeekend ? "Weekend — click to mark"
                 : displayStatus
-                ? `${displayStatus} — tap: Present · double-tap: Absent · pencil: edit`
-                : "Tap: Present · Double-tap: Absent"
+                ? `${displayStatus} — click: Present · double-click: Absent`
+                : "Click: Present · Double-click: Absent"
               }
               style={{
-                aspectRatio:"1", borderRadius:5,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:10, fontWeight: isToday ? 800 : 500,
-                background: sty.bg, color: sty.color,
-                border: isErr
-                  ? "2px solid var(--accent-red)"
-                  : isToday ? `2px solid var(--accent-blue)` : sty.border,
+                minHeight:52, padding:"6px 8px",
+                display:"flex", flexDirection:"column", alignItems:"flex-start", justifyContent:"space-between",
+                background: sty.bg,
+                borderBottom:"1px solid var(--border)",
+                borderRight:"1px solid rgba(255,255,255,0.04)",
+                borderLeft: isErr ? "3px solid var(--accent-red)" : isToday ? "3px solid var(--accent-blue)" : "3px solid transparent",
                 cursor: isFuture ? "default" : "pointer",
-                // Fast transition for the instant color flip
-                transition:"background 0.1s, color 0.1s, border-color 0.1s, transform 0.1s",
+                transition:"background 0.12s, border-color 0.12s",
                 position:"relative", userSelect:"none", overflow:"hidden",
+                opacity: isFuture ? 0.65 : 1,
               }}
               onMouseEnter={(e) => {
                 if (!isFuture) {
                   const el = e.currentTarget as HTMLElement;
-                  el.style.transform = "scale(1.13)";
+                  el.style.background = "rgba(255,255,255,0.06)";
                   const icon = el.querySelector(".edit-hint") as HTMLElement | null;
                   if (icon) icon.style.opacity = "1";
                 }
               }}
               onMouseLeave={(e) => {
                 const el = e.currentTarget as HTMLElement;
-                el.style.transform = "scale(1)";
+                el.style.background = sty.bg;
                 const icon = el.querySelector(".edit-hint") as HTMLElement | null;
                 if (icon) icon.style.opacity = "0";
               }}
             >
-              {day}
+              {/* Top row: date number + edit icon */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%" }}>
+                <span style={{
+                  fontSize:13, fontWeight: isToday ? 800 : 600,
+                  color: isToday ? "var(--accent-blue)" : isFuture ? "rgba(255,255,255,0.2)" : sty.color,
+                  lineHeight:1,
+                }}>{day}</span>
 
-              {/* Pencil — small corner button */}
-              {!isFuture && (
-                <span
-                  className="edit-hint"
-                  onClick={(e) => openEdit(e, dateStr)}
-                  title="Edit / change status"
-                  style={{
-                    position:"absolute", top:2, left:2,
-                    width:14, height:14, borderRadius:3,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    background:"rgba(0,0,0,0.55)",
-                    opacity:0, transition:"opacity 0.15s",
-                    cursor:"pointer", zIndex:2,
-                  }}
-                >
-                  <Pencil size={7} color="#fff" />
-                </span>
-              )}
+                {/* Pencil edit icon */}
+                {!isFuture && (
+                  <span
+                    className="edit-hint"
+                    onClick={(e) => openEdit(e, dateStr)}
+                    title="Edit / change status"
+                    style={{
+                      width:18, height:18, borderRadius:4,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      background:"rgba(0,0,0,0.4)",
+                      opacity:0, transition:"opacity 0.15s",
+                      cursor:"pointer", zIndex:2,
+                    }}
+                  >
+                    <Pencil size={9} color="#fff" />
+                  </span>
+                )}
+              </div>
 
-              {/* Blue dot = manually marked */}
-              {(rec?.manuallyMarked || optimistic[dateStr]) && (
-                <div style={{ position:"absolute", top:1, right:2, width:4, height:4, borderRadius:"50%", background:"var(--accent-blue)", zIndex:1 }} />
-              )}
+              {/* Bottom row: status label */}
+              <div style={{ display:"flex", alignItems:"center", gap:4, marginTop:2 }}>
+                {statusLabel && (
+                  <>
+                    <span style={{
+                      width:6, height:6, borderRadius:"50%",
+                      background: sty.color, flexShrink:0,
+                    }} />
+                    <span style={{
+                      fontSize:9, fontWeight:600, color: sty.color,
+                      letterSpacing:"0.02em", lineHeight:1,
+                    }}>{statusLabel}</span>
+                  </>
+                )}
+                {/* Manual dot */}
+                {(rec?.manuallyMarked || optimistic[dateStr]) && (
+                  <span style={{
+                    width:5, height:5, borderRadius:"50%",
+                    background:"var(--accent-blue)", marginLeft:"auto",
+                  }} />
+                )}
+              </div>
             </div>
           );
         })}
       </div>
 
-
       {/* Legend */}
-      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:10, padding:"8px 0", borderTop:"1px solid var(--border)" }}>
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginTop:14, padding:"10px 0", borderTop:"1px solid var(--border)" }}>
         {[
           { bg:"rgba(34,197,94,0.28)",   color:"#4ade80",               label:"Present"  },
           { bg:"rgba(34,197,94,0.18)",   color:"#86efac",               label:"Late"     },
@@ -461,14 +503,14 @@ function InteractiveCalendar({
           { bg:"rgba(59,130,246,0.28)",  color:"#93c5fd",               label:"Holiday"  },
           { bg:"rgba(148,163,184,0.18)", color:"rgba(203,213,225,0.75)",label:"N/A"      },
         ].map((l) => (
-          <div key={l.label} style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"var(--text-secondary)" }}>
-            <div style={{ width:12, height:12, borderRadius:3, background:l.bg, border:`1px solid ${l.color}60`, flexShrink:0 }} />
+          <div key={l.label} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"var(--text-secondary)" }}>
+            <div style={{ width:10, height:10, borderRadius:3, background:l.bg, border:`1px solid ${l.color}60`, flexShrink:0 }} />
             <span style={{ color:l.color, fontWeight:600 }}>{l.label}</span>
           </div>
         ))}
-        <div style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"var(--text-secondary)", marginLeft:"auto" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"var(--text-secondary)", marginLeft:"auto" }}>
           <div style={{ width:6, height:6, borderRadius:"50%", background:"var(--accent-blue)" }} />
-          <span>Manual</span>
+          <span>Manually Marked</span>
         </div>
       </div>
     </>
@@ -579,6 +621,7 @@ export default function ManualAttendancePanel() {
   const today = new Date();
   const [year, setYear]   = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
+  const [salaryDate, setSalaryDate] = useState<string>("");
 
   /* fetch employees */
   useEffect(() => {
@@ -601,6 +644,36 @@ export default function ManualAttendancePanel() {
 
   /* attendance records for selected employee */
   const { records, loading: recLoading } = useEmployeeAttendance(selectedEmp?.employeeId ?? "");
+
+  /* fetch salary date for selected employee */
+  useEffect(() => {
+    if (!selectedEmp) { setSalaryDate(""); return; }
+    const empDocRef = doc(db, "employees", selectedEmp.id);
+    getDoc(empDocRef).then((snap) => {
+      if (snap.exists()) {
+        setSalaryDate(snap.data().salaryDate ?? "");
+      } else {
+        setSalaryDate("");
+      }
+    }).catch(() => setSalaryDate(""));
+  }, [selectedEmp]);
+
+  /* compute adjusted payment date */
+  const paymentInfo = useMemo(() => {
+    if (!salaryDate || !selectedEmp) return null;
+    const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+    const absentCount = records.filter(r => r.status === "Absent" && r.date.startsWith(prefix)).length;
+    try {
+      const base = new Date(salaryDate);
+      if (isNaN(base.getTime())) return null;
+      const payDate = new Date(year, month, base.getDate());
+      payDate.setDate(payDate.getDate() + absentCount);
+      return { baseDayOfMonth: base.getDate(), absentCount, adjustedDate: payDate };
+    } catch {
+      return null;
+    }
+  }, [salaryDate, records, year, month, selectedEmp]);
+
   const filteredEmps = useMemo(() => employees.filter(e =>
     e.name.toLowerCase().includes(empSearch.toLowerCase()) ||
     e.department.toLowerCase().includes(empSearch.toLowerCase())
@@ -771,6 +844,42 @@ export default function ManualAttendancePanel() {
             </div>
           ) : (
             <StatsStrip key={refreshKey} records={records} year={year} month={month} />
+          )}
+
+          {/* Payment Info Banner */}
+          {paymentInfo && (
+            <div style={{
+              display:"flex", alignItems:"center", gap:14, padding:"12px 16px", marginBottom:14,
+              borderRadius:"var(--radius-sm)",
+              background: paymentInfo.absentCount > 0 ? "rgba(239,68,68,0.06)" : "rgba(34,197,94,0.06)",
+              border: `1px solid ${paymentInfo.absentCount > 0 ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`,
+              flexWrap:"wrap",
+            }}>
+              <CalendarClock size={16} color={paymentInfo.absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)"} />
+              <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap", flex:1 }}>
+                <div>
+                  <div style={{ fontSize:10, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>Base Salary Day</div>
+                  <div style={{ fontSize:13, fontWeight:700 }}>{paymentInfo.baseDayOfMonth}<sup>{getOrdinalSuffix(paymentInfo.baseDayOfMonth)}</sup></div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>Absent ({MONTHS[month].slice(0,3)})</div>
+                  <div style={{ fontSize:13, fontWeight:700, color: paymentInfo.absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)" }}>
+                    {paymentInfo.absentCount} day{paymentInfo.absentCount !== 1 ? "s" : ""}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>Adjusted Payment</div>
+                  <div style={{ fontSize:13, fontWeight:700, color: paymentInfo.absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)" }}>
+                    {paymentInfo.adjustedDate.toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
+                  </div>
+                </div>
+              </div>
+              {paymentInfo.absentCount > 0 && (
+                <div style={{ fontSize:10, color:"var(--text-muted)", fontStyle:"italic", width:"100%" }}>
+                  Payment shifted +{paymentInfo.absentCount} day{paymentInfo.absentCount !== 1 ? "s" : ""}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Month navigation */}
