@@ -8,6 +8,9 @@ anthropic
 groq
 openai
 
+google-generativeai
+requests
+
 # Google
 google-auth
 google-auth-oauthlib
