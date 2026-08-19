@@ -11,6 +11,8 @@ import { db } from "@/lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { toast } from "sonner";
 
+const ADMIN_ONLY_CLIENT = ["/employees", "/reports", "/documents", "/issues", "/employer"];
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, initialized } = useAuth();
   const router = useRouter();
@@ -70,7 +72,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
      Double protection: if an employee reaches an admin-only route
      (e.g. via browser back/forward or URL manipulation), redirect them. */
   const pathname = usePathname();
-  const ADMIN_ONLY_CLIENT = ["/employees", "/reports", "/documents", "/issues", "/employer"];
 
   useEffect(() => {
     if (!role || !initialized) return;

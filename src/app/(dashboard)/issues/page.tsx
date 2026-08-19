@@ -73,9 +73,6 @@ export default function IssuesPage() {
   const [transcript, setTranscript]     = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQuery, setSearchQuery]   = useState("");
-  const [recentDocs, setRecentDocs]     = useState<{ id: string; url: string }[]>([]);
-  const [showRecent, setShowRecent]     = useState(false);
-  const [activeTabName, setActiveTabName] = useState("");
   const recognitionRef                  = useRef<SpeechRecognitionInstance | null>(null);
   const [savedDocs, setSavedDocs] = useState<{id: string, url: string, name: string}[]>([]);
 const [showDropdown, setShowDropdown] = useState(false);
@@ -90,8 +87,6 @@ const [showDropdown, setShowDropdown] = useState(false);
       setDocConnected(true);
       fetchIssues(savedId);
     }
-    const recent = localStorage.getItem("ems_recent_docs");
-    if (recent) setRecentDocs(JSON.parse(recent));
   }, []);
 
   // Speech recognition
@@ -202,7 +197,6 @@ localStorage.setItem("ems_doc_id", id);
       //   return [...prev, ...newIssues];
       // });
       setIssues(data.issues);
-      if (data.tab_name) setActiveTabName(data.tab_name);
     }
   } catch { setError("Could not fetch issues."); }
   finally { setFetching(false); }

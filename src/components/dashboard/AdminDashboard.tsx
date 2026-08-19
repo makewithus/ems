@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import {
-  Users, Clock, UserX, CalendarDays, DollarSign,
+  Users, Clock, CalendarDays, DollarSign,
   FolderOpen, Cake, Megaphone,
   Check, X, Loader2,
 } from "lucide-react";
@@ -47,7 +47,7 @@ export default function AdminDashboard() {
   /* ─── Live state ─── */
   const [employeeCount, setEmployeeCount] = useState(0);
   const [presentCount, setPresentCount]   = useState(0);
-  const [absentCount, setAbsentCount]     = useState(0);
+
   const [documentCount, setDocumentCount] = useState(0);
   const [noticeCount, setNoticeCount]     = useState(0);
   const [payrollTotal, setPayrollTotal]   = useState(0);
@@ -114,7 +114,7 @@ export default function AdminDashboard() {
     const todayStr = new Date().toISOString().split("T")[0];
     const q = query(collection(db, "attendance"), where("date", "==", todayStr));
     const unsub = onSnapshot(q, (snap) => {
-      let present = 0, absent = 0;
+      let present = 0;
       snap.docs.forEach((d) => {
         const s = d.data().status ?? "";
         if (s === "Present" || s === "Late") present++;

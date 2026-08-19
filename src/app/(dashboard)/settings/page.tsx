@@ -394,6 +394,7 @@ export default function SettingsPage() {
     { id:"leavePolicy", label:"Leave Policy",         icon:CalendarDays, show:isAdmin },
     { id:"payrollRules",label:"Payroll Rules",        icon:DollarSign,   show:isAdmin },
     { id:"emailConfig", label:"Email Configuration",  icon:Mail,         show:isAdmin },
+    { id:"theme",       label:"Theme Options",        icon:Palette,      show:isAdmin },
   ];
   const visibleTabs = allTabs.filter((t) => t.show);
 
@@ -463,6 +464,7 @@ export default function SettingsPage() {
               <button className="btn btn-primary" style={{ gap:6 }} onClick={()=>toast.success("Email configuration saved!")}><Save size={14}/>Save Config</button>
             </div>
           )}
+          {activeTab === "theme" && isAdmin && <ThemeContent />}
         </div>
       </div>
     </div>

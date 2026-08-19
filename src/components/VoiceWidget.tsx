@@ -9,16 +9,20 @@ export default function VoiceWidget({ sidebarOpen = true }: VoiceWidgetProps) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [docId, setDocId] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [preview, setPreview] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRecognition =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
@@ -27,6 +31,7 @@ export default function VoiceWidget({ sidebarOpen = true }: VoiceWidgetProps) {
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
       let interim = "";
       let final = "";
@@ -47,6 +52,7 @@ export default function VoiceWidget({ sidebarOpen = true }: VoiceWidgetProps) {
       setTranscript("");
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onerror = (e: any) => {
       setIsListening(false);
       setTranscript("");

@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronLeft, ChevronRight, Users, CheckCircle2,
   XCircle, Clock, AlertCircle, X, Save, Loader2,
-  CalendarDays, PenLine, RotateCcw, Search,
+  CalendarDays, PenLine, Search,
   UserCheck, ListChecks, Pencil, CalendarClock,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
@@ -527,7 +527,7 @@ function BulkRegisterModal({ employees, onClose }: { employees: EmpOption[]; onC
 
   const filtered = employees.filter(e => e.name.toLowerCase().includes(search.toLowerCase()) || e.department.toLowerCase().includes(search.toLowerCase()));
   const toggleAll = () => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map(e => e.employeeId)));
-  const toggle = (id: string) => { const s = new Set(selected); s.has(id) ? s.delete(id) : s.add(id); setSelected(s); };
+  const toggle = (id: string) => { const s = new Set(selected); if (s.has(id)) { s.delete(id); } else { s.add(id); } setSelected(s); };
 
   const save = async () => {
     if (!selected.size) { toast.error("Select at least one employee"); return; }

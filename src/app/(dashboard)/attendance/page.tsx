@@ -98,6 +98,7 @@ export default function AttendancePage() {
       }
       clockIn();
       toast.success("Clocked in successfully!");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       toast.error(e.message || "Clock-in failed. Try again.");
     } finally {

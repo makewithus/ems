@@ -9,7 +9,6 @@ import { useEmployeeAttendance, recordClockIn, recordClockOut } from "@/hooks/us
 import { db } from "@/lib/firebase";
 import {
   collection, query, where, onSnapshot, orderBy, limit,
-  doc, getDoc,
 } from "firebase/firestore";
 import { formatCurrency } from "@/lib/utils";
 
@@ -112,7 +111,7 @@ export default function EmployeeDashboard() {
     
     const endCountDate = new Date(cYear, cMonth, now.getDate()); // up to yesterday (since <)
 
-    let current = new Date(startCountDate);
+    const current = new Date(startCountDate);
     while (current < endCountDate) {
       const isWeekend = current.getDay() === 0 || current.getDay() === 6;
       if (!isWeekend) {
@@ -303,6 +302,7 @@ export default function EmployeeDashboard() {
         }
         clockIn();
         toast.success("Clocked in successfully!");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } catch (e: any) {
         toast.error(e.message || "Clock-in failed.");
       } finally {

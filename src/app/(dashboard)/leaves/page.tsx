@@ -9,7 +9,7 @@ import { LEAVE_TYPES } from "@/lib/utils";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
-  collection, addDoc, updateDoc, doc,
+  collection, addDoc, updateDoc,
   onSnapshot, query, where, orderBy, serverTimestamp,
 } from "firebase/firestore";
 
