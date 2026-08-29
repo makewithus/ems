@@ -76,7 +76,7 @@ export default function AddEmployeePage() {
   const { departments } = useDepartments();
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
-  const [savedCreds, setSavedCreds] = useState<{ employeeId: string; password: string } | null>(null);
+  const [savedCreds, setSavedCreds] = useState<{ employeeId: string; email: string; password: string } | null>(null);
   
   // States for toggling visibility
   const [showPass, setShowPass] = useState(false); // For credential card
@@ -148,7 +148,7 @@ export default function AddEmployeePage() {
     setSaving(true);
     try {
       // 1. Create Firebase Auth account via secondary app (admin session unaffected)
-      const { uid, email } = await createEmployeeAuth(data.employeeId, data.password);
+      const { uid, email } = await createEmployeeAuth(data.firstName, data.password);
 
       const cid = companyId ?? "default";
       const displayName = `${data.firstName} ${data.lastName}`;
@@ -191,7 +191,7 @@ export default function AddEmployeePage() {
         updatedAt: now,
       });
 
-      setSavedCreds({ employeeId: data.employeeId, password: data.password });
+      setSavedCreds({ employeeId: data.employeeId, email, password: data.password });
       setSubmitted(true);
       toast.success(`${displayName} onboarded successfully!`);
     } catch (err: unknown) {
@@ -204,7 +204,7 @@ export default function AddEmployeePage() {
 
   const copyCredentials = () => {
     if (!savedCreds) return;
-    const text = `EMS Portal Login\nEmployee ID: ${savedCreds.employeeId}\nPassword: ${savedCreds.password}\nLogin at: ${window.location.origin}/login/employee`;
+    const text = `EMS Portal Login\nLogin Email: ${savedCreds.email}\nPassword: ${savedCreds.password}\nLogin at: ${window.location.origin}/login/employee`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -232,8 +232,8 @@ export default function AddEmployeePage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
                 <div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Employee ID (Username)</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "0.04em" }}>{savedCreds.employeeId}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 2 }}>Login Email (Username)</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "0.04em" }}>{savedCreds.email}</div>
                 </div>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
@@ -384,12 +384,12 @@ export default function AddEmployeePage() {
                   🔐 Setting employee portal credentials
                 </p>
                 <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}>
-                  The Employee ID is the login username. Set a password and share it with the employee via WhatsApp. They can log in at <strong>/login/employee</strong>.
+                  The employee's login email will be generated automatically. Set a password and share it with the employee via WhatsApp. They can log in at <strong>/login/employee</strong>.
                 </p>
               </div>
 
               <div style={{ gridColumn: "1/-1" }}>
-                <Field label="Employee ID (Username) *" id="empId" error={errors.employeeId?.message}>
+                <Field label="Employee ID *" id="empId" error={errors.employeeId?.message}>
                   <input
                     id="empId"
                     className="input-base"

@@ -81,31 +81,13 @@ export const useAuthStore = create<AuthState>()(
             set({ profile, role: profile.role, companyId: profile.companyId });
             return { role: profile.role };
           } else {
-            // No Firestore profile — this is likely the very first admin setup
-            // Only create a super_admin profile if the email matches the Firebase Auth admin account
-            const currentUser = auth.currentUser;
-            const defaultProfile = {
-              uid,
-              email: currentUser?.email ?? "",
-              displayName: currentUser?.displayName ?? currentUser?.email?.split("@")[0] ?? "Admin",
-              role: "super_admin" as Role,
-              companyId: "default",
-              employeeId: "",
-              isActive: true,
-            };
-            try {
-              await setDoc(doc(db, "users", uid), {
-                ...defaultProfile,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-              });
-              set({ profile: defaultProfile as UserProfile, role: "super_admin" as Role, companyId: "default" });
-              return { role: "super_admin" as Role };
-            } catch {
-              // If profile creation fails, default to employee (safe fallback)
-              set({ profile: null, role: "employee" as Role, companyId: null });
-              return { role: "employee" as Role };
-            }
+            // SECURITY FIX [C4]: No Firestore profile found.
+            // Previously this auto-created a super_admin profile, which is a
+            // privilege escalation vector. Now defaults to employee (safe).
+            // Admin profiles must be created explicitly via the setup flow.
+            console.warn("[Auth] No Firestore profile found for UID:", uid, "— defaulting to employee role.");
+            set({ profile: null, role: "employee" as Role, companyId: null });
+            return { role: "employee" as Role };
           }
         } catch {
           // Firestore unavailable — default to employee (safe, not super_admin)

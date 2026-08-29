@@ -2,12 +2,12 @@
 import { useState, useEffect } from "react";
 import {
   Building2, Shield, CalendarDays, DollarSign, Mail, Palette,
-  X, Check, Save, User, Plus, Trash2, Tags, Loader2,
+  X, Check, Save, User, Trash2, Tags, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { useDepartments } from "@/hooks/useDepartments";
 
 /* ─── Permission matrix ─── */
@@ -130,8 +130,8 @@ function CategoriesContent() {
 }
 
 /* ─── Company Settings ─── */
-type CompanyData = { name:string; email:string; startTime:string; endTime:string; phone:string; address:string };
-const COMPANY_DEFAULTS: CompanyData = { name:"", email:"", startTime:"09:00", endTime:"18:00", phone:"", address:"" };
+type CompanyData = { name:string; email:string; phone:string; address:string };
+const COMPANY_DEFAULTS: CompanyData = { name:"", email:"", phone:"", address:"" };
 
 function CompanySettingsContent({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<CompanyData>(COMPANY_DEFAULTS);
@@ -170,8 +170,6 @@ function CompanySettingsContent({ isAdmin }: { isAdmin: boolean }) {
           { label:"Company Name",    k:"name",      type:"text",  ph:"MakeWithUs Pvt Ltd" },
           { label:"Corporate Email", k:"email",     type:"email", ph:"hr@company.com" },
           { label:"Phone Number",    k:"phone",     type:"tel",   ph:"+91 XXXXX XXXXX" },
-          { label:"Work Hours (Start)",k:"startTime",type:"time",  ph:"" },
-          { label:"Work Hours (End)",  k:"endTime",  type:"time",  ph:"" },
         ].map((f) => (
           <div key={f.k}>
             <label style={{ fontSize:13,color:"var(--text-secondary)",display:"block",marginBottom:6 }}>{f.label}</label>
@@ -237,6 +235,12 @@ function PersonalInfoContent() {
   const { profile, user } = useAuthStore();
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
+  const [address, setAddress] = useState("");
+  const [ecName, setEcName] = useState("");
+  const [ecPhone, setEcPhone] = useState("");
+  const [ecRelation, setEcRelation] = useState("");
+  const [empDocId, setEmpDocId] = useState("");
+
   const [empData, setEmpData] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -245,70 +249,106 @@ function PersonalInfoContent() {
   useEffect(() => {
     const employeeId = profile?.employeeId;
     if (!employeeId || !user?.uid) { setLoadingEmp(false); return; }
-    // Load from employees collection and fallback/check user doc
-    import("firebase/firestore").then(({ collection: col, query: q, where: w, getDocs, doc: fsDoc, getDoc }) => {
-      getDoc(fsDoc(db, "users", user.uid)).then((userSnap) => {
-        const userData = userSnap.exists() ? userSnap.data() : {};
-        
-        getDocs(q(col(db, "employees"), w("employeeId", "==", employeeId), w("uid", "==", user.uid)))
-          .then((snap) => {
-            if (!snap.empty) {
-              const d = snap.docs[0].data();
-              setEmpData({
-                firstName:      d.firstName      ?? "",
-                lastName:       d.lastName       ?? "",
-                email:          d.email          ?? "",
-                phone:          userData.phone   || d.phone || "",
-                dob:            d.dob            ?? "",
-                gender:         d.gender         ?? "",
-                department:     d.department     ?? "",
-                designation:    d.designation    ?? "",
-                joiningDate:    d.joiningDate    ?? "",
-                employeeId:     d.employeeId     ?? "",
-                employmentType: d.employmentType ?? "",
-              });
-              setPhone(userData.phone || d.phone || "");
-              setDob(d.dob || "");
-            }
-            setLoadingEmp(false);
-          })
-          .catch(() => setLoadingEmp(false));
-      }).catch(() => setLoadingEmp(false));
-    });
+
+    const load = async () => {
+      try {
+        // Fetch employees doc by uid
+        const empSnap = await getDocs(
+          query(collection(db, "employees"), where("uid", "==", user.uid))
+        );
+        if (!empSnap.empty) {
+          const docRef = empSnap.docs[0];
+          const d = docRef.data();
+          setEmpDocId(docRef.id);
+          setEmpData({
+            firstName:      d.firstName      ?? "",
+            lastName:       d.lastName       ?? "",
+            email:          d.email          ?? "",
+            dob:            d.dob            ?? "",
+            gender:         d.gender         ?? "",
+            department:     d.department     ?? "",
+            designation:    d.designation    ?? "",
+            joiningDate:    d.joiningDate    ?? "",
+            employeeId:     d.employeeId     ?? "",
+            employmentType: d.employmentType ?? "",
+          });
+          setPhone(d.phone || "");
+          setDob(d.dob || "");
+          setAddress(d.address || "");
+          setEcName(d.emergencyContact?.name || "");
+          setEcPhone(d.emergencyContact?.phone || "");
+          setEcRelation(d.emergencyContact?.relation || "");
+        }
+      } catch (err) {
+        console.error("Failed to load employee profile:", err);
+      } finally {
+        setLoadingEmp(false);
+      }
+    };
+    load();
   }, [profile?.employeeId, user?.uid]);
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setPhotoFile(e.target.files[0]);
+      setPhotoPreview(URL.createObjectURL(e.target.files[0]));
+    }
+  };
+
+  // Calculate live profile completion (6 fields: phone, dob, address, ecName, ecPhone, ecRelation)
+  const checkFields = [phone, dob, address, ecName, ecPhone, ecRelation];
+  const completedFields = checkFields.filter(f => f && f.trim() !== "").length;
+  const currentCompletion = Math.round((completedFields / 6) * 100);
+
   const handleSave = async () => {
+    if (!user?.uid) { toast.error("Not authenticated."); return; }
+    if (!empDocId) { toast.error("Employee record not found. Please refresh."); return; }
+
+    // ── Field validation ──────────────────────────────────────
+    if (phone && !/^[0-9+\-\s]{7,15}$/.test(phone.trim())) {
+      toast.error("Phone number must be 7–15 digits (numbers only)."); return;
+    }
+    if (ecPhone && !/^[0-9+\-\s]{7,15}$/.test(ecPhone.trim())) {
+      toast.error("Emergency contact phone must be 7–15 digits."); return;
+    }
+    if (ecName && !/^[a-zA-Z\s.'-]{2,50}$/.test(ecName.trim())) {
+      toast.error("Contact name must be 2–50 letters only."); return;
+    }
+    if (ecRelation && !/^[a-zA-Z\s]{2,30}$/.test(ecRelation.trim())) {
+      toast.error("Relation must be letters only (e.g. Father, Spouse)."); return;
+    }
+
     setSaving(true);
     try {
-      const { collection: col, query: q, where: w, getDocs, doc: fsDoc, updateDoc, serverTimestamp: sts } = await import("firebase/firestore");
-      const employeeId = profile?.employeeId;
-      
-      // Try to update the employees collection. Catch any permission errors since employees may have write-restrictions in production.
-      if (employeeId && user?.uid) {
-        try {
-          const snap = await getDocs(q(col(db, "employees"), w("employeeId", "==", employeeId), w("uid", "==", user.uid)));
-          if (!snap.empty) {
-            await updateDoc(fsDoc(db, "employees", snap.docs[0].id), { phone, dob, updatedAt: sts() });
-          }
-        } catch (err) {
-          console.warn("Direct update on employees doc restricted by Firestore security rules, falling back to users doc:", err);
-        }
-      }
+      // Calculate completion
+      const finalCheckFields = [phone, dob, address, ecName, ecPhone, ecRelation];
+      const finalCompletion = Math.round(
+        finalCheckFields.filter(f => f && f.trim() !== "").length / 6 * 100
+      );
 
-      // Always update the users collection which is fully writable by the owner.
-      if (user?.uid) {
-        const { doc: fsDoc2, updateDoc: upDoc } = await import("firebase/firestore");
-        await upDoc(fsDoc2(db, "users", user.uid), { phone, dob, updatedAt: sts() });
-      }
-      
-      toast.success("Profile updated!");
+      // Build payload — only allowed profile fields
+      const updatePayload = {
+        phone:              phone.trim(),
+        dob:                dob,
+        address:            address.trim(),
+        emergencyContact:   { name: ecName.trim(), phone: ecPhone.trim(), relation: ecRelation.trim() },
+        profileCompletion:  finalCompletion,
+        updatedAt:          serverTimestamp(),
+      };
+
+      // Write to employees collection (source of truth for admin view)
+      await updateDoc(doc(db, "employees", empDocId), updatePayload);
+
+      toast.success("Profile updated successfully!");
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      console.error("Failed to save changes:", err);
-      toast.error("Failed to save. Try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      console.error("[Settings] Failed to save profile:", msg, err);
+      toast.error("Failed to save. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   const Row = ({ label, value }: { label: string; value: string }) => (
@@ -329,12 +369,26 @@ function PersonalInfoContent() {
         </div>
       ) : (
         <>
+          {/* Completion Progress Bar */}
+          <div style={{ marginBottom: 24, padding: "16px 20px", background: "var(--bg-elevated)", borderRadius: "var(--radius-md)", border: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Profile Completion</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Complete your profile to unlock all features</div>
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--accent-blue)" }}>{currentCompletion}%</div>
+            </div>
+            <div style={{ height: 8, background: "rgba(0,0,0,0.06)", borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${currentCompletion}%`, background: "var(--accent-blue)", borderRadius: 4, transition: "width 0.3s ease" }} />
+            </div>
+          </div>
+
           {/* Read-only details */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
             <Row label="First Name"       value={empData.firstName} />
             <Row label="Last Name"        value={empData.lastName} />
             <Row label="Employee ID"      value={empData.employeeId} />
-            <Row label="Login Email"      value={empData.email || `${empData.employeeId?.toLowerCase()}@mwu-ems.app`} />
+            <Row label="Login Email"      value={empData.email} />
             <Row label="Department"       value={empData.department} />
             <Row label="Designation"      value={empData.designation} />
             <Row label="Employment Type"  value={empData.employmentType} />
@@ -342,29 +396,79 @@ function PersonalInfoContent() {
             <Row label="Gender"           value={empData.gender} />
           </div>
 
-          <div style={{ marginBottom: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+          <div style={{ marginBottom: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Contact</h3>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Phone Number</label>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Phone Number</label>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Numbers only, 7–15 digits</p>
               <input
                 className="input-base"
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 XXXXX XXXXX"
-                style={{ width: "100%" }}
+                inputMode="numeric"
+                maxLength={15}
+                placeholder="eg. 9876543210"
+                style={{ width: "100%", marginBottom: 12 }}
+                onChange={(e) => setPhone(e.target.value.replace(/[^0-9+\-\s]/g, "").slice(0, 15))}
+              />
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Address</label>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Your full residential address</p>
+              <textarea
+                className="input-base" rows={3} value={address}
+                onChange={(e) => setAddress(e.target.value.slice(0, 200))}
+                placeholder="Full address..." style={{ width: "100%" }}
               />
             </div>
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Personal</h3>
-              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Date of Birth</label>
+              <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Date of Birth</label>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Must be a valid past date</p>
               <input
-                className="input-base"
-                type="date"
-                value={dob}
+                className="input-base" type="date" value={dob}
+                max={new Date().toISOString().split("T")[0]}
                 onChange={(e) => setDob(e.target.value)}
                 style={{ width: "100%" }}
               />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Emergency Contact</h3>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Contact Name</label>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Letters only, 2–50 characters</p>
+                <input
+                  className="input-base" type="text" value={ecName}
+                  maxLength={50}
+                  placeholder="e.g. Ramesh Kumar"
+                  onChange={(e) => setEcName(e.target.value.replace(/[^a-zA-Z\s.'-]/g, "").slice(0, 50))}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Phone Number</label>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Numbers only, 7–15 digits</p>
+                <input
+                  className="input-base" type="tel" value={ecPhone}
+                  inputMode="numeric"
+                  maxLength={15}
+                  placeholder="eg. 9876543210"
+                  onChange={(e) => setEcPhone(e.target.value.replace(/[^0-9+\-\s]/g, "").slice(0, 15))}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Relation</label>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>e.g. Father, Spouse, Sibling</p>
+                <input
+                  className="input-base" type="text" value={ecRelation}
+                  maxLength={30}
+                  placeholder="e.g. Father"
+                  onChange={(e) => setEcRelation(e.target.value.replace(/[^a-zA-Z\s]/g, "").slice(0, 30))}
+                  style={{ width: "100%" }}
+                />
+              </div>
             </div>
           </div>
 

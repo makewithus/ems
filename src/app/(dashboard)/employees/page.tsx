@@ -32,6 +32,7 @@ type EmpRow = {
   salary: number;
   uid: string;
   password: string;
+  profileCompletion?: number;
 };
 
 const statusColor: Record<string, string> = {
@@ -49,22 +50,49 @@ const statusBg: Record<string, string> = {
 function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }) {
   const [showPass, setShowPass] = useState(false);
   const [newPass, setNewPass]   = useState("");
+  const [loginEmail, setLoginEmail] = useState(emp.email || "");
   const [curPass, setCurPass]   = useState(emp.password || "");
   const [showCur, setShowCur]   = useState(false);
   const [saving, setSaving]     = useState(false);
 
   const handleSave = async () => {
-    if (!newPass.trim()) { toast.error("Enter a new password."); return; }
+    const emailChanged = loginEmail.trim() !== (emp.email || "").trim();
+    const passChanged = newPass.trim() !== "";
+    if (!emailChanged && !passChanged) { toast.error("No changes to save."); return; }
     if (!curPass.trim()) { toast.error("Enter current password to authorize."); return; }
     setSaving(true);
     try {
-      await updateEmployeeAuth(emp.employeeId, curPass, emp.employeeId, newPass);
-      await updateDoc(doc(db, "employees", emp.id), { password: newPass, updatedAt: serverTimestamp() });
-      if (emp.uid) await updateDoc(doc(db, "users", emp.uid), { updatedAt: serverTimestamp() });
-      toast.success("Password updated successfully!");
+      const res = await updateEmployeeAuth(emp.email, curPass, loginEmail, passChanged ? newPass : undefined);
+      
+      let finalUid = emp.uid;
+      if (res.uid) finalUid = res.uid;
+
+      // Build update payload
+      const empUpdate: Record<string, any> = {
+        uid: finalUid,
+        email: res.email || loginEmail,
+        updatedAt: serverTimestamp(),
+      };
+      if (passChanged) empUpdate.password = newPass;
+
+      await updateDoc(doc(db, "employees", emp.id), empUpdate);
+
+      if (finalUid) {
+        const { setDoc } = await import("firebase/firestore");
+        await setDoc(doc(db, "users", finalUid), {
+          uid: finalUid,
+          email: res.email || loginEmail,
+          displayName: `${emp.firstName} ${emp.lastName}`.trim(),
+          employeeId: emp.employeeId,
+          role: "employee",
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+
+      toast.success("Credentials updated successfully!");
       onClose();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update password.");
+      toast.error(err instanceof Error ? err.message : "Failed to update credentials.");
     } finally { setSaving(false); }
   };
 
@@ -79,7 +107,7 @@ function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }
           {/* Username (read-only) */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>Login Email</label>
-            <input className="input-base" readOnly value={`${emp.employeeId.toLowerCase()}@mwu-ems.app`} style={{ color: "var(--text-muted)", cursor: "text" }} />
+            <input className="input-base" type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} />
           </div>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>Employee ID (Username)</label>
@@ -398,6 +426,7 @@ export default function EmployeesPage() {
             salary:      data.salary      ?? 0,
             uid:         data.uid         ?? "",
             password:    data.password    ?? "",
+            profileCompletion: data.profileCompletion ?? 0,
           };
         });
         setEmployees(rows);
@@ -535,6 +564,7 @@ export default function EmployeesPage() {
                 <th>ID</th>
                 <th>Department</th>
                 <th>Designation</th>
+                <th>Completion</th>
                 <th>Joining Date</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -561,6 +591,14 @@ export default function EmployeesPage() {
                     </div>
                   </td>
                   <td style={{ color: "var(--text-secondary)" }}>{e.designation}</td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${e.profileCompletion || 0}%`, background: "var(--accent-blue)", borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: 12, color: "var(--text-muted)", minWidth: 28 }}>{e.profileCompletion || 0}%</span>
+                    </div>
+                  </td>
                   <td style={{ color: "var(--text-secondary)", fontSize: 13 }}>{e.joiningDate ? formatDate(e.joiningDate) : "—"}</td>
                   <td>
                     <span className="badge" style={{ background: statusBg[e.status] ?? "rgba(255,255,255,0.06)", color: statusColor[e.status] ?? "var(--text-muted)" }}>
@@ -602,7 +640,15 @@ export default function EmployeesPage() {
                 <span className="badge" style={{ background: statusBg[e.status] ?? "rgba(255,255,255,0.06)", color: statusColor[e.status] ?? "var(--text-muted)" }}>{e.status}</span>
               </div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>{e.designation}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{e.department}</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>{e.department}</div>
+              
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ flex: 1, height: 4, background: "rgba(0,0,0,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${e.profileCompletion || 0}%`, background: "var(--accent-blue)", borderRadius: 2 }} />
+                </div>
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{e.profileCompletion || 0}% Complete</span>
+              </div>
+
               <div style={{ height: 1, background: "var(--border)", margin: "12px 0" }} />
               <div style={{ display: "flex", gap: 8 }}>
                 <a href={`mailto:${e.email}`} className="btn btn-secondary" style={{ flex: 1, justifyContent: "center", padding: "6px 8px", fontSize: 12 }}><Mail size={12} /> Email</a>

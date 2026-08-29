@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
+import { useAuthStore } from "@/store/auth.store";
 
 const REPORT_TYPES = [
   { id: "attendance", label: "Attendance Report",  icon: Calendar,   color: "var(--accent-blue)"   },
@@ -32,6 +33,9 @@ function monthKey(ts: { toDate?: () => Date } | string | null): string {
 }
 
 export default function ReportsPage() {
+  const { role } = useAuthStore();
+  const isAdmin = role === "super_admin" || role === "hr_admin";
+
   const [active, setActive] = useState("attendance");
   const [from, setFrom] = useState(() => {
     const d = new Date();
@@ -39,6 +43,12 @@ export default function ReportsPage() {
     return d.toISOString().split("T")[0];
   });
   const [to, setTo] = useState(new Date().toISOString().split("T")[0]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      window.location.href = "/dashboard";
+    }
+  }, [isAdmin]);
 
   // ── Live Attendance trend (monthly) ──
   const [attendanceTrend, setAttendanceTrend] = useState<{ month: string; present: number; absent: number; late: number }[]>([]);

@@ -71,6 +71,7 @@ export interface Employee {
   employmentType: EmploymentType;
   salary: number;
   status: "Active" | "Inactive" | "Archived";
+  profileCompletion?: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

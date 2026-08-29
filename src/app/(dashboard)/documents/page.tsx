@@ -218,6 +218,8 @@ function ActionMenu({
   onTogglePin: () => void;
   onToggleFav: () => void;
 }) {
+  const { role } = useAuthStore();
+  const isAdmin = role === "super_admin" || role === "hr_admin";
   const [open, setOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, right: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -257,12 +259,12 @@ function ActionMenu({
       action: () => { setOpen(false); onPreview(); },
       danger: false,
     },
-    {
+    ...(isAdmin ? [{
       icon: Edit2,
       label: "Edit Details",
       action: () => { setOpen(false); onEdit(); },
       danger: false,
-    },
+    }] : []),
     {
       icon: Pin,
       label: file.pinned ? "Unpin Document" : "Pin Document",
@@ -284,12 +286,12 @@ function ActionMenu({
       },
       danger: false,
     },
-    {
+    ...(isAdmin ? [{
       icon: Trash2,
       label: "Delete",
       action: () => { setOpen(false); onDelete(); },
       danger: true,
-    },
+    }] : []),
   ];
 
   return (
@@ -365,7 +367,8 @@ export default function DocumentsPage() {
   const [editingFile, setEditingFile] = useState<DocFile | null>(null);
   const [deletingFile, setDeletingFile] = useState<DocFile | null>(null);
 
-  const { user } = useAuthStore();
+  const { user, role } = useAuthStore();
+  const isAdmin = role === "super_admin" || role === "hr_admin";
 
   /* ─── Fetch Documents from Firestore (no auto-seeding) ─── */
   useEffect(() => {
@@ -628,9 +631,11 @@ export default function DocumentsPage() {
             <button id="doc-view-grid" onClick={() => setView("grid")} className="btn" style={{ padding: "8px 12px", background: view === "grid" ? "var(--text-primary)" : "transparent", color: view === "grid" ? "var(--bg-primary)" : "var(--text-primary)", borderRadius: 0 }}><Grid3X3 size={14} /></button>
             <button id="doc-view-list" onClick={() => setView("list")} className="btn" style={{ padding: "8px 12px", background: view === "list" ? "var(--text-primary)" : "transparent", color: view === "list" ? "var(--bg-primary)" : "var(--text-primary)", borderRadius: 0 }}><List size={14} /></button>
           </div>
-          <button id="doc-upload" onClick={() => setShowUpload(true)} className="btn btn-primary" style={{ gap: 8 }}>
-            <Upload size={14} /> Upload File
-          </button>
+          {isAdmin && (
+            <button id="doc-upload" onClick={() => setShowUpload(true)} className="btn btn-primary" style={{ gap: 8 }}>
+              <Upload size={14} /> Upload File
+            </button>
+          )}
         </div>
 
         {/* Loading Spinner */}

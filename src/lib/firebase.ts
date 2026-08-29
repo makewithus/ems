@@ -15,13 +15,14 @@ const firebaseConfig = {
   measurementId:     process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Validate at startup so misconfigured deployments fail loudly.
+// Warn at startup if env vars are missing — but don't throw at module level
+// (a module-level throw corrupts Next.js webpack chunks and causes SSR crashes)
 const missing = Object.entries(firebaseConfig)
   .filter(([key, val]) => key !== "measurementId" && !val)
-  .map(([key]) => `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, "_$1").toUpperCase()}`);
+  .map(([key]) => key);
 
-if (missing.length) {
-  throw new Error(`Firebase config is incomplete. Missing env vars:\n  ${missing.join("\n  ")}\nAdd them to .env.local and restart the dev server.`);
+if (missing.length && typeof window !== "undefined") {
+  console.warn(`[Firebase] Missing env vars: ${missing.join(", ")}. Check .env.local`);
 }
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);

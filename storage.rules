@@ -6,25 +6,33 @@ service firebase.storage {
       return request.auth != null;
     }
     
+    // SECURITY NOTE: getRole() uses Firebase Auth custom claims.
+    // If custom claims are not set, this returns null and write access
+    // will be denied. This is the SAFE default — block unless proven admin.
     function getRole() {
-      // Accessing custom claims or user roles path can be simulated,
-      // here we enforce authentication at baseline.
       return request.auth.token.role;
     }
 
+    function isAdmin() {
+      return isSignedIn() && (getRole() == 'hr_admin' || getRole() == 'super_admin');
+    }
+
+    // SECURITY FIX [C6]: Write access restricted to admin roles.
+    // Previously any signed-in user could upload/overwrite/delete files
+    // in documents, employees, and company storage paths.
     match /documents/{allPaths=**} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn(); // HR Admin check can be added via custom token claims
+      allow write: if isAdmin();
     }
     
     match /employees/{allPaths=**} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow write: if isAdmin();
     }
     
     match /payslips/{allPaths=**} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || getRole() == 'hr_admin' || getRole() == 'super_admin');
-      allow write: if isSignedIn() && (getRole() == 'hr_admin' || getRole() == 'super_admin');
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
     }
     
     match /avatars/{userId} {
@@ -34,7 +42,7 @@ service firebase.storage {
     
     match /company/{allPaths=**} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow write: if isSignedIn() && (getRole() == 'super_admin');
     }
   }
 }

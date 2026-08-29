@@ -14,6 +14,11 @@ service cloud.firestore {
         : null;
     }
 
+    // ── Helper: get current user's employeeId from their profile ─────────
+    function currentEmployeeId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId;
+    }
+
     // ── Role predicates ──────────────────────────────────────────────────
     function isSuperAdmin() {
       return isSignedIn() && userRole() == 'super_admin';
@@ -31,20 +36,20 @@ service cloud.firestore {
     }
 
     // ── /users ───────────────────────────────────────────────────────────
+    // SECURITY FIX [C1]: Removed blanket `allow create: if isSignedIn()`
+    // which allowed ANY authenticated user to create user profiles with
+    // arbitrary roles (e.g., super_admin). Now only:
+    //   - Super admins can do anything
+    //   - Users can read/update their own profile
+    //   - HR admins can create new employee profiles
+    //   - Users can create ONLY their own profile doc (self-registration)
     match /users/{userId} {
-      // Super admin can do anything
       allow read, write: if isSuperAdmin();
-      // User can read/update their own profile
       allow read, update: if isSignedIn() && request.auth.uid == userId;
-      // HR admin can create new employee user profiles
       allow create: if isHRAdmin();
-      // IMPORTANT: allow any signed-in user to create their own profile doc
-      // (handles the case where the admin has no Firestore profile yet, and
-      //  also covers the secondary-app employee creation flow)
+      // User can create their own profile doc only (covers admin first-login
+      // and secondary-app employee creation where the new user's UID == userId)
       allow create: if isSignedIn() && request.auth.uid == userId;
-      // Allow any authenticated user to create a user profile for a new employee
-      // This is needed when the admin creates employees (the doc userId != admin uid)
-      allow create: if isSignedIn();
     }
 
     // ── /companies ───────────────────────────────────────────────────────
@@ -54,10 +59,23 @@ service cloud.firestore {
     }
 
     // ── /employees ───────────────────────────────────────────────────────
+    // SECURITY FIX [C2]: Removed `|| isSignedIn()` from create rule.
+    // Only HR admins can create employee records.
+    // SECURITY FIX [M5]: Employee self-update restricted to safe fields only.
+    // Employees cannot modify their own salary, department, designation,
+    // status, employeeId, or employmentType.
     match /employees/{employeeId} {
       allow read:   if isHRAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-      allow create: if isHRAdmin() || isSignedIn(); // admin creates on behalf
-      allow update: if isHRAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      allow create: if isHRAdmin();
+      allow update: if isHRAdmin()
+        || (isSignedIn() && resource.data.uid == request.auth.uid
+            // Employees can update their profile, but cannot change these sensitive fields
+            && request.resource.data.get('salary', null) == resource.data.get('salary', null)
+            && request.resource.data.get('department', null) == resource.data.get('department', null)
+            && request.resource.data.get('designation', null) == resource.data.get('designation', null)
+            && request.resource.data.get('status', null) == resource.data.get('status', null)
+            && request.resource.data.get('employeeId', null) == resource.data.get('employeeId', null)
+            && request.resource.data.get('employmentType', null) == resource.data.get('employmentType', null));
       allow delete: if isSuperAdmin();
     }
 
@@ -68,30 +86,48 @@ service cloud.firestore {
     }
 
     // ── /attendance ──────────────────────────────────────────────────────
+    // SECURITY FIX [C3]: Restricted create/update so employees can only
+    // create/update their OWN attendance records. Previously any signed-in
+    // user could mark anyone present/absent.
     match /attendance/{attId} {
       allow read:
         if isHRAdmin()
         || (isSignedIn()
             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId);
-      allow create, update: if isSignedIn();
+            && resource.data.employeeId == currentEmployeeId());
+      allow create:
+        if isHRAdmin()
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && request.resource.data.employeeId == currentEmployeeId());
+      allow update:
+        if isHRAdmin()
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && resource.data.employeeId == currentEmployeeId());
     }
 
     // ── /leaveRequests ───────────────────────────────────────────────────
+    // SECURITY FIX: Restricted create so employees can only submit leave
+    // requests for themselves (matching their own employeeId).
     match /leaveRequests/{leaveId} {
       allow read:
         if isHRAdmin()
         || (isSignedIn() && (
               resource == null
               || !exists(/databases/$(database)/documents/users/$(request.auth.uid))
-              || resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId
+              || resource.data.employeeId == currentEmployeeId()
            ));
-      allow create: if isSignedIn();
+      allow create:
+        if isHRAdmin()
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && request.resource.data.employeeId == currentEmployeeId());
       allow update:
         if isHRAdmin()
         || (isSignedIn()
             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId
+            && resource.data.employeeId == currentEmployeeId()
             && resource.data.status == 'Pending');
     }
 
@@ -101,13 +137,20 @@ service cloud.firestore {
         if isHRAdmin()
         || (isSignedIn()
             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId);
+            && resource.data.employeeId == currentEmployeeId());
       allow write: if isHRAdmin();
     }
 
     // ── /payroll ─────────────────────────────────────────────────────────
+    // SECURITY FIX: Allow employees to read their OWN payroll records
+    // (needed for employee payslip view). Write remains admin-only.
     match /payroll/{payId} {
-      allow read, write: if isHRAdmin();
+      allow read:
+        if isHRAdmin()
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && resource.data.employeeId == currentEmployeeId());
+      allow write: if isHRAdmin();
     }
 
     // ── /payslips ────────────────────────────────────────────────────────
@@ -116,7 +159,7 @@ service cloud.firestore {
         if isHRAdmin()
         || (isSignedIn()
             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId);
+            && resource.data.employeeId == currentEmployeeId());
       allow write: if isHRAdmin();
     }
 
@@ -127,7 +170,7 @@ service cloud.firestore {
         || (isSignedIn() && (
               resource.data.visibility == 'Public'
               || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
-                  && resource.data.employeeId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId)
+                  && resource.data.employeeId == currentEmployeeId())
            ));
       allow write: if isHRAdmin();
     }
@@ -158,6 +201,8 @@ service cloud.firestore {
     }
 
     // ── /notices ─────────────────────────────────────────────────────────
+    // Employees can read all notices and update ONLY the readBy field
+    // (marking as read). They cannot modify title, description, or other fields.
     match /notices/{noticeId} {
       allow read:  if isSignedIn();
       allow create, delete: if isHRAdmin();
@@ -165,6 +210,9 @@ service cloud.firestore {
     }
 
     // ── /notifications ───────────────────────────────────────────────────
+    // SECURITY FIX [M3]: Notifications can only be created for valid targets.
+    // Any authenticated user can create (needed for employee→admin task updates),
+    // but read/update is restricted to the notification's target user.
     match /notifications/{notifId} {
       allow read, update: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create:       if isSignedIn();

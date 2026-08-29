@@ -37,6 +37,7 @@ type Emp = {
   salaryDate: string;
   status: string;
   password?: string;
+  profileCompletion?: number;
 };
 
 const TABS = ["Overview", "Attendance", "Leaves", "Payroll", "Documents", "Tasks", "Activity"];
@@ -48,44 +49,51 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
   const { departments } = useDepartments();
 
   const [newPassword, setNewPassword] = useState("");
-  const [currentPassword, setCurrentPassword] = useState(emp.password || "");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
+  const [showConfirmPass, setShowConfirmPass] = useState(false);
   const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [passError, setPassError] = useState("");
 
   const set = (k: keyof Emp, v: string | number) =>
     setForm((p) => ({ ...p, [k]: v }));
 
   const save = async () => {
+    setPassError("");
     if (!form.firstName.trim() || !form.lastName.trim()) {
       toast.error("First and last name are required"); return;
     }
 
-    const credentialsChanged =
-      form.employeeId !== emp.employeeId ||
-      newPassword.trim() !== "";
-
-    if (credentialsChanged) {
-      if (!currentPassword.trim()) {
-        toast.error("Current password of the employee is required to modify credentials.");
-        return;
+    if (newPassword.trim() !== "") {
+      if (newPassword !== confirmPassword) {
+        setPassError("New passwords do not match."); return;
       }
     }
+
+    const credentialsChanged =
+      form.email !== emp.email ||
+      newPassword.trim() !== "";
 
     setSaving(true);
     try {
       let updatedEmail = form.email;
       let passwordToSave = form.password || "";
 
+      let finalUid = emp.uid;
+
       if (credentialsChanged) {
         // Update credentials in Auth
         const res = await updateEmployeeAuth(
-          emp.employeeId,
-          currentPassword,
-          form.employeeId,
-          newPassword
+          emp.email,
+          emp.password || "",
+          form.email,
+          newPassword.trim() || undefined
         );
         updatedEmail = res.email;
-        passwordToSave = newPassword.trim() || currentPassword;
+        passwordToSave = newPassword.trim() || (emp.password || "");
+        if (res.uid) {
+          finalUid = res.uid;
+        }
       }
 
       // Update employee record
@@ -93,6 +101,7 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
         firstName:      form.firstName.trim(),
         lastName:       form.lastName.trim(),
         email:          updatedEmail,
+        uid:            finalUid,
         phone:          form.phone.trim(),
         dob:            form.dob,
         gender:         form.gender,
@@ -109,13 +118,18 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
       });
 
       // Update user profile record as well if uid exists
-      if (emp.uid) {
-        await updateDoc(doc(db, "users", emp.uid), {
+      if (finalUid) {
+        // If finalUid changed (forced reset), we should setDoc to ensure the document exists
+        const { setDoc } = await import("firebase/firestore");
+        await setDoc(doc(db, "users", finalUid), {
+          uid:            finalUid,
           email:          updatedEmail,
           displayName:    `${form.firstName} ${form.lastName}`.trim(),
           employeeId:     form.employeeId,
+          role:           "employee",
+          companyId:      emp.companyId || "default",
           updatedAt:      serverTimestamp(),
-        });
+        }, { merge: true });
       }
 
       toast.success("Employee updated successfully!");
@@ -188,7 +202,7 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <Field label="First Name"       field="firstName" />
           <Field label="Last Name"        field="lastName" />
-          <Field label="Email"            field="email" type="email" />
+          <Field label="Employee ID"      field="employeeId" />
           <Field label="Phone"            field="phone" />
           <Field label="Designation"      field="designation" />
           <Field label="Department"       field="department" options={departments} />
@@ -211,60 +225,26 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
           <div style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Employee ID (Username)
+                Login Email (Username)
               </label>
               <input
-                type="text"
+                type="email"
                 className="input-base"
-                value={form.employeeId}
-                onChange={(e) => set("employeeId", e.target.value)}
+                value={form.email}
+                onChange={(e) => set("email", e.target.value)}
               />
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                New Password (Optional)
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  type={showPass ? "text" : "password"}
-                  className="input-base"
-                  placeholder="Leave blank to keep current"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "4px 6px" }}
-                  onClick={() => setShowPass(!showPass)}
-                >
-                  {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              </div>
-            </div>
-          </div>
-          {(!emp.password || form.employeeId !== emp.employeeId || newPassword.trim() !== "") && (
-            <div style={{ gridColumn: "1/-1", marginTop: 8 }}>
-              <div style={{ padding: "12px 14px", background: "rgba(239, 68, 68, 0.08)", border: "1px solid rgba(239, 68, 68, 0.2)", borderRadius: "var(--radius-sm)", marginBottom: 8 }}>
-                <p style={{ fontSize: 11.5, color: "var(--accent-red)", fontWeight: 500 }}>
-                  ⚠️ Authorization Required
-                </p>
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.4 }}>
-                  {emp.password
-                    ? "Updating the Employee ID (Username) or Password requires authentication with their credentials."
-                    : "This employee does not have a saved password in the system. You must enter their current password to authorize credentials changes or update their profile."}
-                </p>
-              </div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Current Employee Password *
+                Already Set Password
               </label>
               <div style={{ position: "relative" }}>
                 <input
                   type={showCurrentPass ? "text" : "password"}
                   className="input-base"
-                  placeholder="Enter employee's current password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  readOnly
+                  value={emp.password || "Not set"}
+                  style={{ color: "var(--text-muted)", paddingRight: 40, cursor: "text" }}
                 />
                 <button
                   type="button"
@@ -276,7 +256,54 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
                 </button>
               </div>
             </div>
-          )}
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                New Password (Optional)
+              </label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type={showPass ? "text" : "password"}
+                  className="input-base"
+                  placeholder="Leave blank to keep current"
+                  value={newPassword}
+                  onChange={(e) => { setNewPassword(e.target.value); setPassError(""); }}
+                  style={{ paddingRight: 40 }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "4px 6px" }}
+                  onClick={() => setShowPass(!showPass)}
+                >
+                  {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: passError ? "var(--accent-red)" : "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                Confirm New Password
+              </label>
+              <div style={{ position: "relative" }} className={passError ? "animate-shake" : ""}>
+                <input
+                  type={showConfirmPass ? "text" : "password"}
+                  className="input-base"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setPassError(""); }}
+                  style={{ paddingRight: 40, borderColor: passError ? "var(--accent-red)" : undefined, boxShadow: passError ? "0 0 0 1px var(--accent-red)" : "none" }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "4px 6px" }}
+                  onClick={() => setShowConfirmPass(!showConfirmPass)}
+                >
+                  {showConfirmPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              {passError && <div style={{ fontSize: 11, color: "var(--accent-red)", marginTop: 4, fontWeight: 500 }}>{passError}</div>}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
@@ -400,7 +427,7 @@ function getOrdinal(n: number): string {
 export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
-  const { role } = useAuthStore();
+  const { role, user } = useAuthStore();
   const isAdmin = role === "super_admin" || role === "hr_admin";
 
   const [emp,       setEmp]       = useState<Emp | null>(null);
@@ -434,6 +461,7 @@ export default function EmployeeProfilePage() {
           salaryDate:     d.salaryDate     ?? "",
           status:         d.status         ?? "Active",
           password:       d.password       ?? "",
+          profileCompletion: d.profileCompletion ?? 0,
         });
       } else {
         toast.error("Employee not found");
@@ -445,6 +473,14 @@ export default function EmployeeProfilePage() {
       setLoading(false);
     });
   }, [id, router]);
+
+  // SECURITY FIX [H5]: Verify employee can only view their own profile
+  useEffect(() => {
+    if (emp && !isAdmin && emp.uid !== user?.uid) {
+      toast.error("Access denied: You can only view your own profile.");
+      router.replace("/dashboard");
+    }
+  }, [emp, isAdmin, user?.uid, router]);
 
   /* ── Toggle Active / Inactive ── */
   const handleToggleStatus = async () => {
@@ -555,6 +591,16 @@ export default function EmployeeProfilePage() {
             >
               {emp.status}
             </span>
+            
+            <div style={{ marginTop: 20, textAlign: "left" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 6 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Profile</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-blue)" }}>{emp.profileCompletion || 0}%</div>
+              </div>
+              <div style={{ height: 6, background: "rgba(0,0,0,0.06)", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${emp.profileCompletion || 0}%`, background: "var(--accent-blue)", borderRadius: 3 }} />
+              </div>
+            </div>
           </div>
 
           {/* Contact info card */}

@@ -291,60 +291,121 @@ export function EmployeeLoginForm() {
   const { signIn } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
   const [serverError, setServerError] = useState("");
-  const [loginType, setLoginType] = useState<"id" | "email">("id");
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } =
+  const { register, handleSubmit, formState: { errors, isSubmitting } } =
     useForm<EmployeeFormData>({ resolver: zodResolver(employeeSchema) });
-
-  const switchType = (t: "id" | "email") => {
-    setLoginType(t);
-    setServerError("");
-    reset();
-  };
 
   const onSubmit = async (data: EmployeeFormData) => {
     setServerError("");
     try {
       let targetEmail = data.identifier;
+      let signedIn = false;
+      let lastError;
+      
+      const isEmployeeId = !data.identifier.includes("@");
 
-      if (loginType === "id") {
-        targetEmail = `${data.identifier.toLowerCase()}@mwu-ems.app`;
-      }
-
-      const { role } = await signIn(targetEmail, data.password);
-      if (role === "super_admin" || role === "hr_admin") {
-        await useAuthStore.getState().signOut();
-        setServerError("This account is an admin account. Please use the admin portal.");
-        return;
-      }
-
-      /* ── Check employee active status in Firestore ── */
-      try {
-        const uid = useAuthStore.getState().user?.uid;
-        if (uid) {
-          // Check by uid field first, fall back to email
-          let empSnap = await getDocs(
-            query(collection(db, "employees"), where("uid", "==", uid))
+      if (isEmployeeId) {
+        // Look up the employee's actual login email from Firestore first
+        try {
+          const empSnap = await getDocs(
+            query(collection(db, "employees"), where("employeeId", "==", data.identifier.toUpperCase()))
           );
-          if (empSnap.empty) {
-            empSnap = await getDocs(
-              query(collection(db, "employees"), where("email", "==", targetEmail))
-            );
-          }
           if (!empSnap.empty) {
-            const empData = empSnap.docs[0].data();
-            const empStatus = empData.status ?? "Active";
-            if (empStatus === "Inactive" || empStatus === "Archived") {
-              await useAuthStore.getState().signOut();
-              setServerError(
-                "Your account has been deactivated. Please contact HR or your administrator."
-              );
-              return;
+            const empEmail = empSnap.docs[0].data().email;
+            if (empEmail) {
+              try {
+                const { role } = await signIn(empEmail, data.password);
+                if (role === "super_admin" || role === "hr_admin") {
+                  await useAuthStore.getState().signOut();
+                  throw new Error("This account is an admin account. Please use the admin portal.");
+                }
+                targetEmail = empEmail;
+                signedIn = true;
+              } catch (err: any) {
+                lastError = err;
+                const errStr = err.message || err.code || "";
+                if (!errStr.includes("invalid-credential") && !errStr.includes("wrong-password") && !errStr.includes("user-not-found")) {
+                  throw err; // non-auth errors (like admin portal error) — stop immediately
+                }
+              }
+            }
+          }
+        } catch (lookupErr: any) {
+          // If Firestore lookup fails or threw a re-thrown error, propagate non-auth errors
+          if (lookupErr.message?.includes("admin account")) throw lookupErr;
+          // Otherwise silently fall through to direct email attempts
+        }
+
+        // Fallback: try direct email patterns if Firestore lookup didn't succeed
+        if (!signedIn) {
+          const baseId = data.identifier.toLowerCase().replace(/\s+/g, '');
+          const emailsToTry = [
+            `${baseId}@makewithus.in`,
+            `${baseId}@mwu-ems.app`,
+          ];
+          for (const currentEmail of emailsToTry) {
+            try {
+              const { role } = await signIn(currentEmail, data.password);
+              if (role === "super_admin" || role === "hr_admin") {
+                await useAuthStore.getState().signOut();
+                throw new Error("This account is an admin account. Please use the admin portal.");
+              }
+              targetEmail = currentEmail;
+              signedIn = true;
+              break;
+            } catch (err: any) {
+              lastError = err;
+              const errStr = err.message || err.code || "";
+              if (!errStr.includes("invalid-credential") && !errStr.includes("wrong-password") && !errStr.includes("user-not-found")) {
+                break;
+              }
             }
           }
         }
+      } else {
+        // If logging in by email, just try once
+        try {
+          const { role } = await signIn(targetEmail, data.password);
+          if (role === "super_admin" || role === "hr_admin") {
+            await useAuthStore.getState().signOut();
+            throw new Error("This account is an admin account. Please use the admin portal.");
+          }
+          signedIn = true;
+        } catch (err: any) {
+          lastError = err;
+        }
+      }
+
+      if (!signedIn) {
+        throw lastError || new Error("auth/invalid-credential");
+      }
+
+      /* ── Check employee active status and prevent ghost accounts ── */
+      try {
+        const uid = useAuthStore.getState().user?.uid;
+        if (uid) {
+          // Check by uid field FIRST. If it fails, they are on a ghost account (because the real employee record was updated with a new UID)
+          let empSnap = await getDocs(
+            query(collection(db, "employees"), where("uid", "==", uid))
+          );
+          
+          if (empSnap.empty) {
+             // Ghost account (admin forced a reset and employee used old password)
+             await useAuthStore.getState().signOut();
+             setServerError("Incorrect credentials. Please try again.");
+             return;
+          }
+
+          const empData = empSnap.docs[0].data();
+          const empStatus = empData.status ?? "Active";
+          if (empStatus === "Inactive" || empStatus === "Archived") {
+            await useAuthStore.getState().signOut();
+            setServerError("Your account has been deactivated. Please contact HR or your administrator.");
+            return;
+          }
+        }
       } catch {
-        // If Firestore check fails, allow login (don't block on Firestore errors)
+        // If Firestore check fails (e.g. network), allow login.
       }
 
       window.location.href = "/dashboard";
@@ -379,52 +440,21 @@ export function EmployeeLoginForm() {
       >
         Sign In
       </h1>
-      <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 24, lineHeight: 1.5 }}>
+      <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 32, lineHeight: 1.5 }}>
         Access your attendance, leave, and payslips.
       </p>
-
-      {/* Login type toggle - brutalist tabs */}
-      <div
-        className="flex mb-8"
-        style={{ borderBottom: "1px solid var(--border-strong)" }}
-      >
-        {(["id", "email"] as const).map((type) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => switchType(type)}
-            style={{
-              padding: "10px 16px",
-              border: "none",
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              background: "transparent",
-              color: loginType === type ? "var(--text-primary)" : "var(--text-muted)",
-              borderBottom: loginType === type ? "2px solid var(--text-primary)" : "2px solid transparent",
-              transition: "color 0.15s",
-            }}
-          >
-            {type === "id" ? "Employee ID" : "Email address"}
-          </button>
-        ))}
-      </div>
 
       {serverError && <ErrorBanner message={serverError} />}
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Identifier Input */}
           <div>
-            <FieldLabel>
-              {loginType === "id" ? "Employee ID" : "Email address"}
-            </FieldLabel>
+            <FieldLabel>Login Email (or Employee ID)</FieldLabel>
             <TextInput
               id="emp-identifier"
-              type={loginType === "email" ? "email" : "text"}
-              placeholder={loginType === "id" ? "e.g. EMP001" : "you@company.com"}
+              type="text"
+              placeholder="name@makewithus.in or EMP0001"
               disabled={isSubmitting}
               error={errors.identifier?.message}
               {...register("identifier")}
