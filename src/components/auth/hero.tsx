@@ -2,6 +2,8 @@
 import { Building2 } from "lucide-react";
 import { motion } from "framer-motion";
 import React from "react";
+import Image from "next/image";
+import logoImg from "../../../images/logo.png";
 
 export function HeroSection() {
   return (
@@ -30,9 +32,16 @@ export function HeroSection() {
           paddingTop: "clamp(24px, 4vw, 48px)",
         }}
       >
-        <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text-inverse)", letterSpacing: "-0.08em", textTransform: "uppercase" }}>
-          makewithus
-        </div>
+        <Image 
+          src={logoImg} 
+          alt="MakeWithUs Logo" 
+          priority
+          style={{ 
+            height: "clamp(24px, 4vw, 36px)", 
+            width: "auto", 
+            objectFit: "contain" 
+          }} 
+        />
       </div>
 
       {/* Centered hero content */}
