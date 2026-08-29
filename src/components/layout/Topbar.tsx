@@ -14,6 +14,7 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
   const { profile, signOut } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
 
   useEffect(() => {
     if (!profile?.uid) return;
@@ -188,7 +189,7 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
             <button
               className="btn btn-ghost"
               style={{ width: "100%", justifyContent: "flex-start", gap: 8, padding: "8px 10px", color: "var(--accent-red)" }}
-              onClick={handleSignOut}
+              onClick={() => { setMenuOpen(false); setShowSignOutModal(true); }}
               id="topbar-signout"
             >
               <LogOut size={14} /> Sign out
@@ -196,6 +197,21 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
           </div>
         )}
       </div>
+
+      {showSignOutModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div className="card" style={{ padding: 32, width: 400, boxShadow: "var(--shadow-lg)" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Sign Out</div>
+            <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 24 }}>
+              Are you sure you want to sign out of your account?
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn btn-danger" style={{ flex: 1 }} onClick={handleSignOut}>Sign Out</button>
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowSignOutModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }
