@@ -39,18 +39,18 @@ interface SpeechRecognitionInstance {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  open:        { label: "Open",        color: "#ef4444", bg: "#fef2f2" },
-  // in_progress: { label: "In Progress", color: "#f59e0b", bg: "#fffbeb" },
-  // testing:     { label: "Testing",     color: "#6366f1", bg: "#eef2ff" },
-  blocked:     { label: "Blocked",     color: "#dc2626", bg: "#fee2e2" },
-  resolved:    { label: "Resolved",    color: "#22c55e", bg: "#f0fdf4" },
+  open:        { label: "Open",        color: "var(--accent-red)", bg: "var(--accent-red-dim)" },
+  // in_progress: { label: "In Progress", color: "var(--accent-amber)", bg: "var(--accent-amber-dim)" },
+  // testing:     { label: "Testing",     color: "#818cf8", bg: "#eef2ff" },
+  blocked:     { label: "Blocked",     color: "var(--accent-red)", bg: "var(--accent-red-dim)" },
+  resolved:    { label: "Resolved",    color: "var(--accent-green)", bg: "var(--accent-green-dim)" },
   // closed:      { label: "Closed",      color: "#6b7280", bg: "#f3f4f6" },
 };
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  high:   { label: "High",   color: "#ef4444", bg: "#fef2f2" },
-  medium: { label: "Medium", color: "#f59e0b", bg: "#fffbeb" },
-  low:    { label: "Low",    color: "#22c55e", bg: "#f0fdf4" },
+  high:   { label: "High",   color: "var(--accent-red)", bg: "var(--accent-red-dim)" },
+  medium: { label: "Medium", color: "var(--accent-amber)", bg: "var(--accent-amber-dim)" },
+  low:    { label: "Low",    color: "var(--accent-green)", bg: "var(--accent-green-dim)" },
 };
 
 const ALL_STATUSES = ["all", "open", "resolved"];
@@ -256,7 +256,7 @@ localStorage.setItem("ems_doc_id", id);
       </div>
 
       {/* Google Doc Connector */}
-      {/* <div style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "18px 20px", marginBottom: 24 }}>
+      {/* <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, padding: "18px 20px", marginBottom: 24 }}>
         <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", margin: "0 0 12px" }}>
           Google Doc Connection
         </p> */}
@@ -264,7 +264,7 @@ localStorage.setItem("ems_doc_id", id);
         {/* {docConnected ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: "#e8f0fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(66, 133, 244, 0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/>
                   <path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
@@ -274,7 +274,7 @@ localStorage.setItem("ems_doc_id", id);
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Doc Connected</p>
                 <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>Open in Google Docs ↗</a>
               </div>
-              <span style={{ background: "#f0fdf4", color: "#16a34a", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, border: "1px solid #bbf7d0" }}>✓ Active</span>
+              <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)" }}>✓ Active</span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => fetchIssues(docId)} style={outlineBtn}>↺ Refresh</button>
@@ -304,7 +304,7 @@ localStorage.setItem("ems_doc_id", id);
                 <button
                   onClick={connectDoc}
                   disabled={!urlInput.trim()}
-                  style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: !urlInput.trim() ? "var(--border,#e5e7eb)" : "#4285f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: !urlInput.trim() ? "not-allowed" : "pointer" }}
+                  style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: !urlInput.trim() ? "var(--border)" : "#4285f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: !urlInput.trim() ? "not-allowed" : "pointer" }}
                 > */}
                   {/* Connect
                 </button>
@@ -312,17 +312,17 @@ localStorage.setItem("ems_doc_id", id);
 
               {/* Recent docs dropdown */}
               {/* {showRecent && recentDocs.length > 0 && (
-                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 90, background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.1)", overflow: "hidden" }}>
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 90, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.1)", overflow: "hidden" }}>
                   <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", padding: "8px 14px 4px", margin: 0 }}>Recent Docs</p>
                   {recentDocs.map((doc, idx) => (
                     <div
                       key={idx}
                       onMouseDown={() => { setUrlInput(doc.url); setShowRecent(false); }}
-                      onMouseOver={e => (e.currentTarget.style.background = "var(--bg-primary,#f9fafb)")}
+                      onMouseOver={e => (e.currentTarget.style.background = "var(--bg-primary)")}
                       onMouseOut={e => (e.currentTarget.style.background = "transparent")}
                       style={{ padding: "10px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, transition: "background 0.1s" }}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: 6, background: "#e8f0fe", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(66, 133, 244, 0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                           <rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/>
                           <path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/>
@@ -342,7 +342,7 @@ localStorage.setItem("ems_doc_id", id);
         )}
       </div> */}
       {/* Google Doc Connector */}
-<div style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "18px 20px", marginBottom: 24 }}>
+<div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, padding: "18px 20px", marginBottom: 24 }}>
   <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", margin: "0 0 12px" }}>
     Google Doc Connection
   </p>
@@ -352,7 +352,7 @@ localStorage.setItem("ems_doc_id", id);
       
       {/* Active doc highlight */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: "#e8f0fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(66, 133, 244, 0.12)", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/><path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
         </div>
         <div>
@@ -361,7 +361,7 @@ localStorage.setItem("ems_doc_id", id);
             <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
               {savedDocs.find(d => d.id === docId)?.name || "Connected Doc"}
             </p>
-            <span style={{ background: "#f0fdf4", color: "#16a34a", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, border: "1px solid #bbf7d0" }}>✓ Active</span>
+            <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)" }}>✓ Active</span>
           </div>
           <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>
             Open in Google Docs ↗
@@ -377,14 +377,14 @@ localStorage.setItem("ems_doc_id", id);
           <div style={{ position: "relative" }}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              style={{ ...outlineBtn, background: showDropdown ? "#f5f3ff" : undefined, color: showDropdown ? "#6366f1" : undefined }}
+              style={{ ...outlineBtn, background: showDropdown ? "rgba(99, 102, 241, 0.1)" : undefined, color: showDropdown ? "#818cf8" : undefined }}
             >
               Switch Project ▾
             </button>
             {showDropdown && (
               <div style={{
                 position: "absolute", top: "100%", right: 0, marginTop: 4,
-                background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)",
+                background: "var(--bg-secondary)", border: "1px solid var(--border)",
                 borderRadius: 10, zIndex: 100, boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
                 minWidth: 220, overflow: "hidden"
               }}>
@@ -403,22 +403,22 @@ localStorage.setItem("ems_doc_id", id);
                     style={{
                       padding: "10px 14px", cursor: "pointer",
                       display: "flex", alignItems: "center", gap: 10,
-                      background: doc.id === docId ? "#f5f3ff" : "transparent",
-                      borderLeft: doc.id === docId ? "3px solid #6366f1" : "3px solid transparent"
+                      background: doc.id === docId ? "rgba(99, 102, 241, 0.1)" : "transparent",
+                      borderLeft: doc.id === docId ? "3px solid #818cf8" : "3px solid transparent"
                     }}
-                    onMouseOver={e => { if (doc.id !== docId) e.currentTarget.style.background = "var(--bg-primary,#f9fafb)"; }}
+                    onMouseOver={e => { if (doc.id !== docId) e.currentTarget.style.background = "var(--bg-primary)"; }}
                     onMouseOut={e => { if (doc.id !== docId) e.currentTarget.style.background = "transparent"; }}
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/><path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/></svg>
                     <div style={{ flex: 1 }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: doc.id === docId ? 600 : 400, color: doc.id === docId ? "#6366f1" : "var(--text-primary)" }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: doc.id === docId ? 600 : 400, color: doc.id === docId ? "#818cf8" : "var(--text-primary)" }}>
                         {doc.name}
                       </p>
                     </div>
-                    {doc.id === docId && <span style={{ fontSize: 10, color: "#6366f1" }}>Active</span>}
+                    {doc.id === docId && <span style={{ fontSize: 10, color: "#818cf8" }}>Active</span>}
                   </div>
                 ))}
-                <div style={{ borderTop: "1px solid var(--border,#e5e7eb)", padding: "8px 14px" }}>
+                <div style={{ borderTop: "1px solid var(--border)", padding: "8px 14px" }}>
                   <button
                     onClick={() => { setShowDropdown(false); setDocConnected(false); setDocId(""); setDocUrl(""); setUrlInput(""); }}
                     style={{ fontSize: 12, color: "#4285f4", background: "none", border: "none", cursor: "pointer", padding: 0 }}
@@ -457,7 +457,7 @@ localStorage.setItem("ems_doc_id", id);
         <button
           onClick={connectDoc}
           disabled={!urlInput.trim()}
-          style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: !urlInput.trim() ? "var(--border,#e5e7eb)" : "#4285f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: !urlInput.trim() ? "not-allowed" : "pointer" }}
+          style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: !urlInput.trim() ? "var(--border)" : "#4285f4", color: "#fff", fontSize: 13, fontWeight: 600, cursor: !urlInput.trim() ? "not-allowed" : "pointer" }}
         >
           Connect
         </button>
@@ -473,7 +473,7 @@ localStorage.setItem("ems_doc_id", id);
               <button
                 key={doc.id}
                 onClick={() => { setDocId(doc.id); setDocUrl(doc.url); setDocConnected(true); fetchIssues(doc.id); }}
-                style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid #4285f4", background: "#e8f0fe", color: "#4285f4", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                style={{ padding: "5px 12px", borderRadius: 20, border: "1px solid #4285f4", background: "rgba(66, 133, 244, 0.12)", color: "#4285f4", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
               >
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" fill="#4285f4"/><path d="M8 10h8M8 14h5" stroke="#fff" strokeWidth="1.2" strokeLinecap="round"/></svg>
                 {doc.name}
@@ -488,7 +488,7 @@ localStorage.setItem("ems_doc_id", id);
 
       {/* Success banner */}
       {success && (
-        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 16px", marginBottom: 20, color: "#16a34a", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ background: "var(--accent-green-dim)", border: "1px solid rgba(34, 197, 94, 0.2)", borderRadius: 8, padding: "10px 16px", marginBottom: 20, color: "var(--accent-green)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
           {success}
         </div>
@@ -502,7 +502,7 @@ localStorage.setItem("ems_doc_id", id);
             <div
               key={s}
               onClick={() => setFilterStatus(filterStatus === s ? "all" : s)}
-              style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "16px 18px", cursor: "pointer", outline: filterStatus === s ? `2px solid ${cfg.color}` : "none" }}
+              style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 18px", cursor: "pointer", outline: filterStatus === s ? `2px solid ${cfg.color}` : "none" }}
             >
               <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", lineHeight: 1 }}>{counts[s] || 0}</div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>{cfg.label}</div>
@@ -535,9 +535,9 @@ localStorage.setItem("ems_doc_id", id);
               onClick={() => setFilterStatus(s)}
               style={{
                 padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 500, cursor: "pointer", border: "1px solid",
-                borderColor: filterStatus === s ? (s === "all" ? "var(--brand-red,#e53e3e)" : STATUS_CONFIG[s]?.color || "var(--brand-red,#e53e3e)") : "var(--border,#e5e7eb)",
-                background:  filterStatus === s ? (s === "all" ? "var(--brand-red,#e53e3e)" : STATUS_CONFIG[s]?.bg  || "#fff") : "var(--bg-card,#fff)",
-                color:       filterStatus === s ? (s === "all" ? "#fff" : STATUS_CONFIG[s]?.color || "#000") : "var(--text-muted)",
+                borderColor: filterStatus === s ? (s === "all" ? "var(--brand-red)" : STATUS_CONFIG[s]?.color || "var(--brand-red)") : "var(--border)",
+                background:  filterStatus === s ? (s === "all" ? "var(--brand-red)" : STATUS_CONFIG[s]?.bg  || "var(--bg-secondary)") : "var(--bg-secondary)",
+                color:       filterStatus === s ? (s === "all" ? "var(--bg-secondary)" : STATUS_CONFIG[s]?.color || "var(--text-primary)") : "var(--text-muted)",
               }}
             >
               {s === "all" ? `All ${counts.all}` : `${STATUS_CONFIG[s]?.label} ${counts[s] || 0}`}
@@ -547,7 +547,7 @@ localStorage.setItem("ems_doc_id", id);
 
         <button
           onClick={() => { if (!docConnected) { setError("Connect a Google Doc first."); return; } setPanelOpen(!panelOpen); setPreview(null); setError(""); }}
-          style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: panelOpen ? "#4f46e5" : "var(--brand-red,#e53e3e)", color: "#fff", whiteSpace: "nowrap" as const }}
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: panelOpen ? "#4f46e5" : "var(--brand-red)", color: "#fff", whiteSpace: "nowrap" as const }}
         >
           {panelOpen ? "✕ Close" : " Voice / Text"}
         </button>
@@ -555,7 +555,7 @@ localStorage.setItem("ems_doc_id", id);
 
       {/* Voice Panel */}
       {panelOpen && (
-        <div style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: 18, marginBottom: 20 }}>
+        <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, padding: 18, marginBottom: 20 }}>
           <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "var(--text-muted)", margin: "0 0 12px" }}>
             Voice / Text Command
           </p>
@@ -569,15 +569,15 @@ localStorage.setItem("ems_doc_id", id);
                   onChange={e => setText(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleSend()}
                   autoFocus
-                  style={{ ...inputStyle, flex: 1, borderColor: isListening ? "#6366f1" : "var(--border,#e5e7eb)" }}
+                  style={{ ...inputStyle, flex: 1, borderColor: isListening ? "#818cf8" : "var(--border)" }}
                 />
                 <button
                   onClick={toggleListening}
-                  style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8, cursor: "pointer", border: `1px solid ${isListening ? "#6366f1" : "var(--border,#e5e7eb)"}`, background: isListening ? "#ede9fe" : "var(--bg-card,#fff)", color: isListening ? "#6366f1" : "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8, cursor: "pointer", border: `1px solid ${isListening ? "#818cf8" : "var(--border)"}`, background: isListening ? "rgba(99, 102, 241, 0.12)" : "var(--bg-secondary)", color: isListening ? "#818cf8" : "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
                   {isListening ? (
                     <span style={{ display: "flex", gap: "2px", alignItems: "center" }}>
-                      {[1,2,3].map(i => <span key={i} style={{ display: "inline-block", width: 3, height: 4, background: "#6366f1", borderRadius: 2, animation: "soundwave 0.6s ease-in-out infinite", animationDelay: `${i*0.15}s` }}/>)}
+                      {[1,2,3].map(i => <span key={i} style={{ display: "inline-block", width: 3, height: 4, background: "#818cf8", borderRadius: 2, animation: "soundwave 0.6s ease-in-out infinite", animationDelay: `${i*0.15}s` }}/>)}
                     </span>
                   ) : (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -591,13 +591,13 @@ localStorage.setItem("ems_doc_id", id);
                 <button
                   onClick={handleSend}
                   disabled={loading || !text.trim()}
-                  style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8, border: "none", background: loading || !text.trim() ? "var(--border,#e5e7eb)" : "var(--brand-red,#e53e3e)", color: "#fff", cursor: loading || !text.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}
+                  style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8, border: "none", background: loading || !text.trim() ? "var(--border)" : "var(--brand-red)", color: "#fff", cursor: loading || !text.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}
                 >
                   {loading ? <span style={{ width: 10, height: 10, border: "1.5px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite", display: "inline-block" }}/> : "→"}
                 </button>
               </div>
               {isListening && (
-                <p style={{ color: "#6366f1", fontSize: 11, margin: "8px 0 0", display: "flex", alignItems: "center", gap: 6 }}>
+                <p style={{ color: "#818cf8", fontSize: 11, margin: "8px 0 0", display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", display: "inline-block", animation: "pulse 1s ease-in-out infinite" }}/>
                   Listening — speak now
                 </p>
@@ -605,11 +605,11 @@ localStorage.setItem("ems_doc_id", id);
             </>
           )}
           {preview && (
-            <div style={{ background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 8, padding: 14 }}>
+            <div style={{ background: "rgba(99, 102, 241, 0.1)", border: "1px solid #ddd6fe", borderRadius: 8, padding: 14 }}>
               <p style={{ fontSize: 13, color: "#3730a3", margin: "0 0 12px", lineHeight: 1.5 }}>{preview.confirmation_message}</p>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                <button onClick={() => setPreview(null)} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--border,#e5e7eb)", background: "var(--bg-card,#fff)", color: "var(--text-muted)", cursor: "pointer", fontSize: 12 }}>Cancel</button>
-                <button onClick={handleConfirm} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#6366f1", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "..." : "✓ Confirm"}</button>
+                <button onClick={() => setPreview(null)} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "pointer", fontSize: 12 }}>Cancel</button>
+                <button onClick={handleConfirm} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#818cf8", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "..." : "✓ Confirm"}</button>
               </div>
             </div>
           )}
@@ -620,11 +620,11 @@ localStorage.setItem("ems_doc_id", id);
       {/* Issue Cards */}
       {fetching ? (
         <div style={{ padding: "60px", textAlign: "center", color: "var(--text-muted)", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-          <span style={{ width: 18, height: 18, border: "2px solid var(--border,#e5e7eb)", borderTopColor: "var(--brand-red,#e53e3e)", borderRadius: "50%", animation: "spin 0.7s linear infinite", display: "inline-block" }}/>
+          <span style={{ width: 18, height: 18, border: "2px solid var(--border)", borderTopColor: "var(--brand-red)", borderRadius: "50%", animation: "spin 0.7s linear infinite", display: "inline-block" }}/>
           Loading issues...
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "60px 20px", textAlign: "center" }}>
+        <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, padding: "60px 20px", textAlign: "center" }}>
           <p style={{ color: "var(--text-muted)", fontSize: 14, margin: 0 }}>
             {!docConnected ? "Connect a Google Doc to see issues." : searchQuery ? `No issues matching "${searchQuery}".` : "No issues found."}
           </p>
@@ -637,11 +637,11 @@ localStorage.setItem("ems_doc_id", id);
             return (
               <div
                 key={issue.number}
-                style={{ background: "var(--bg-card,#fff)", border: "1px solid var(--border,#e5e7eb)", borderRadius: 10, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 16, transition: "box-shadow 0.15s" }}
+                style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 10, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 16, transition: "box-shadow 0.15s" }}
                 onMouseOver={e => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)")}
                 onMouseOut={e  => (e.currentTarget.style.boxShadow = "none")}
               >
-                <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--bg-primary,#f9fafb)", border: "1px solid var(--border,#e5e7eb)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--bg-primary)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", fontFamily: "monospace" }}>#{issue.number}</span>
                 </div>
 
@@ -693,8 +693,8 @@ localStorage.setItem("ems_doc_id", id);
 
 const inputStyle: React.CSSProperties = {
   padding: "9px 12px",
-  background: "var(--bg-card,#fff)",
-  border: "1px solid var(--border,#e5e7eb)",
+  background: "var(--bg-secondary)",
+  border: "1px solid var(--border)",
   borderRadius: 8,
   color: "var(--text-primary)",
   fontSize: 13,
@@ -704,8 +704,8 @@ const inputStyle: React.CSSProperties = {
 const outlineBtn: React.CSSProperties = {
   padding: "7px 14px",
   borderRadius: 7,
-  border: "1px solid var(--border,#e5e7eb)",
-  background: "var(--bg-primary,#f9fafb)",
+  border: "1px solid var(--border)",
+  background: "var(--bg-primary)",
   color: "var(--text-muted)",
   fontSize: 12,
   cursor: "pointer",

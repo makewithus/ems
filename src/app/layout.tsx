@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { Toaster } from "sonner";
+import TitleUpdater from "@/components/TitleUpdater";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "MWU | Employee Management System",
-    template: "MWU | %s",
+    default: "makewithus",
+    template: "%s | makewithus",
   },
   description:
     "Enterprise-grade Employee Management System for HR departments. Manage attendance, payroll, leaves, documents, and more.",
@@ -25,6 +26,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
       </head>
       <body suppressHydrationWarning>
+        <TitleUpdater />
         {children}
         <Toaster
           position="top-right"

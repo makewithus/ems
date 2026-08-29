@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
   collection, addDoc, onSnapshot, query, orderBy,
-  serverTimestamp, doc, updateDoc, arrayUnion,
+  serverTimestamp, doc, updateDoc, arrayUnion, deleteDoc
 } from "firebase/firestore";
 
 const PRIORITY_CONFIG = {
@@ -45,6 +45,30 @@ export default function NoticesPage() {
   const [newNotice, setNewNotice] = useState({
     title: "", desc: "", priority: "Normal", dept: "All", publish: "", expiry: "",
   });
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const editNotice = (n: NoticeRow) => {
+    setNewNotice({
+      title: n.title,
+      desc: n.desc,
+      priority: n.priority,
+      dept: n.dept,
+      publish: n.date,
+      expiry: n.expiry
+    });
+    setEditingId(n.id);
+    setShowForm(true);
+  };
+
+  const deleteNotice = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this notice?")) return;
+    try {
+      await deleteDoc(doc(db, "notices", id));
+      toast.success("Notice deleted.");
+    } catch {
+      toast.error("Failed to delete notice.");
+    }
+  };
 
   /* ── Real-time listener ── */
   useEffect(() => {
@@ -106,22 +130,36 @@ export default function NoticesPage() {
   const publishNotice = async () => {
     if (!newNotice.title.trim()) { toast.error("Please enter a notice title."); return; }
     try {
-      await addDoc(collection(db, "notices"), {
-        title:       newNotice.title,
-        description: newNotice.desc,
-        department:  newNotice.dept,
-        priority:    newNotice.priority,
-        publishDate: newNotice.publish || new Date().toISOString().split("T")[0],
-        expiryDate:  newNotice.expiry || null,
-        createdBy:   profile?.displayName ?? "Admin",
-        readBy:      [],
-        createdAt:   serverTimestamp(),
-        updatedAt:   serverTimestamp(),
-      });
-      toast.success("Notice published successfully!");
+      if (editingId) {
+        await updateDoc(doc(db, "notices", editingId), {
+          title:       newNotice.title,
+          description: newNotice.desc,
+          department:  newNotice.dept,
+          priority:    newNotice.priority,
+          publishDate: newNotice.publish || new Date().toISOString().split("T")[0],
+          expiryDate:  newNotice.expiry || null,
+          updatedAt:   serverTimestamp(),
+        });
+        toast.success("Notice updated successfully!");
+      } else {
+        await addDoc(collection(db, "notices"), {
+          title:       newNotice.title,
+          description: newNotice.desc,
+          department:  newNotice.dept,
+          priority:    newNotice.priority,
+          publishDate: newNotice.publish || new Date().toISOString().split("T")[0],
+          expiryDate:  newNotice.expiry || null,
+          createdBy:   profile?.displayName ?? "Admin",
+          readBy:      [],
+          createdAt:   serverTimestamp(),
+          updatedAt:   serverTimestamp(),
+        });
+        toast.success("Notice published successfully!");
+      }
       setNewNotice({ title: "", desc: "", priority: "Normal", dept: "All", publish: "", expiry: "" });
+      setEditingId(null);
       setShowForm(false);
-    } catch { toast.error("Failed to publish notice."); }
+    } catch { toast.error(editingId ? "Failed to update notice." : "Failed to publish notice."); }
   };
 
   const filtered = filter === "All" ? notices : notices.filter((n) => n.priority === filter);
@@ -140,7 +178,11 @@ export default function NoticesPage() {
           </p>
         </div>
         {isAdmin && (
-          <button id="notice-create" className="btn btn-primary" style={{ gap: 6 }} onClick={() => setShowForm(true)}>
+          <button id="notice-create" className="btn btn-primary" style={{ gap: 6 }} onClick={() => {
+            setNewNotice({ title: "", desc: "", priority: "Normal", dept: "All", publish: "", expiry: "" });
+            setEditingId(null);
+            setShowForm(true);
+          }}>
             <Plus size={14} /> Create Notice
           </button>
         )}
@@ -186,6 +228,12 @@ export default function NoticesPage() {
                         {n.date && <span>Posted: {formatDate(n.date)}</span>}
                         {n.expiry && <span>Expires: {formatDate(n.expiry)}</span>}
                       </div>
+                      {isAdmin && (
+                        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                          <button onClick={(e) => { e.stopPropagation(); editNotice(n); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11 }}>Edit</button>
+                          <button onClick={(e) => { e.stopPropagation(); deleteNotice(n.id); }} className="btn btn-secondary" style={{ padding: "4px 10px", fontSize: 11, color: "var(--accent-red)", borderColor: "var(--accent-red-dim)" }}>Delete</button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -228,8 +276,12 @@ export default function NoticesPage() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
           <div className="card" style={{ padding: 32, width: 520, boxShadow: "var(--shadow-lg)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Create Notice</div>
-              <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setShowForm(false)}><X size={16} /></button>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{editingId ? "Edit Notice" : "Create Notice"}</div>
+              <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+                setNewNotice({ title: "", desc: "", priority: "Normal", dept: "All", publish: "", expiry: "" });
+              }}><X size={16} /></button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
@@ -265,8 +317,12 @@ export default function NoticesPage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
-              <button id="notice-submit" className="btn btn-primary" style={{ flex: 1 }} onClick={publishNotice}>Publish Notice</button>
-              <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button id="notice-submit" className="btn btn-primary" style={{ flex: 1 }} onClick={publishNotice}>{editingId ? "Update Notice" : "Publish Notice"}</button>
+              <button className="btn btn-secondary" onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+                setNewNotice({ title: "", desc: "", priority: "Normal", dept: "All", publish: "", expiry: "" });
+              }}>Cancel</button>
             </div>
           </div>
         </div>
