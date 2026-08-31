@@ -509,15 +509,23 @@ tbody td {
     grid-template-columns: repeat(2, 1fr) !important;
   }
 
-  /* Documents: hide sidebar, full-width content */
+  /* Documents: stack sidebar and content */
+  .doc-layout {
+    flex-direction: column !important;
+    padding: 0 !important;
+  }
   .doc-sidebar {
-    display: none !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 16px !important;
+    display: block !important;
   }
   .doc-content {
     padding: 20px 16px !important;
-  }
-  .doc-layout {
-    padding: 0 !important;
   }
 
   /* Leave request cards: stack vertically */

@@ -364,10 +364,13 @@ export default function TasksPage() {
       {!loading && viewMode === "kanban" && (
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(4, minmax(260px, 1fr))",
           gap: 16,
           alignItems: "start",
           minHeight: 300,
+          overflowX: "auto",
+          paddingBottom: 8,
+          WebkitOverflowScrolling: "touch"
         }}>
           {COLUMNS.map(({ status, color }) => {
             const col = tasks.filter((t) => t.status === status);

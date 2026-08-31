@@ -189,9 +189,9 @@ export default function NoticesPage() {
       </div>
 
       {/* Priority filter */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", flexWrap: "nowrap", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
         {["All", "Critical", "Urgent", "Normal", "Low"].map((p) => (
-          <button key={p} onClick={() => setFilter(p)} className={`btn ${filter === p ? "btn-primary" : "btn-secondary"}`} style={{ fontSize: 12, padding: "6px 14px" }}>
+          <button key={p} onClick={() => setFilter(p)} className={`btn ${filter === p ? "btn-primary" : "btn-secondary"}`} style={{ fontSize: 12, padding: "6px 14px", flexShrink: 0 }}>
             {p}
           </button>
         ))}

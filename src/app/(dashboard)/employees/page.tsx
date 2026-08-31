@@ -492,8 +492,8 @@ export default function EmployeesPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, overflowX: "auto", flexWrap: "nowrap", paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
+        <div style={{ position: "relative", flex: "0 0 220px", minWidth: 220 }}>
           <Search size={14} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
           <input
             id="employees-search"

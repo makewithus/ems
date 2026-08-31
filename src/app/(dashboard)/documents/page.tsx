@@ -621,8 +621,8 @@ export default function DocumentsPage() {
         </div>
 
         {/* Toolbar */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
-          <div style={{ position: "relative", flex: 1, maxWidth: 400 }}>
+        <div className="doc-toolbar" style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 32, overflowX: "auto", flexWrap: "nowrap", paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
+          <div style={{ position: "relative", flex: "0 0 240px", maxWidth: 400 }}>
             <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
             <input id="doc-search" className="input-base" placeholder="Search files, tags, custodian..." style={{ paddingLeft: 36, fontSize: 14 }} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>

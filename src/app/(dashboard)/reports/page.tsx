@@ -198,7 +198,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Report type selector */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(110px, 1fr))", gap: 10, marginBottom: 24, overflowX: "auto", paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
         {REPORT_TYPES.map((r) => (
           <button key={r.id} onClick={() => setActive(r.id)} style={{
             padding: "12px 10px", borderRadius: "var(--radius-sm)", border: `1px solid ${active === r.id ? r.color : "var(--border)"}`,
@@ -212,7 +212,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Date range */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <label style={{ fontSize: 13, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>From</label>
           <input id="report-from" type="date" className="input-base" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: "auto" }} />
@@ -226,7 +226,7 @@ export default function ReportsPage() {
 
       {/* ── Attendance ── */}
       {active === "attendance" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           <div className="card" style={{ padding: "20px 20px 12px" }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Monthly Attendance Trend</div>
             {attLoading ? <Spinner /> : attendanceTrend.length === 0 ? <EmptyChart label="attendance" /> : (
@@ -268,7 +268,7 @@ export default function ReportsPage() {
           </div>
           <div className="card" style={{ padding: "18px 20px", gridColumn: "1/-1" }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Summary Statistics</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(140px, 1fr))", gap: 12, overflowX: "auto", paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
               {[
                 { label: "Avg Attendance", value: `${avgAtt}%`,               color: "var(--accent-blue)"  },
                 { label: "Total Present",  value: attTotal.present.toString(), color: "var(--accent-green)" },
@@ -307,7 +307,7 @@ export default function ReportsPage() {
           {!payLoading && payrollTrend.length > 0 && (
             <div className="card" style={{ padding: "18px 20px" }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Payroll Summary</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(140px, 1fr))", gap: 12, overflowX: "auto", paddingBottom: 8, WebkitOverflowScrolling: "touch" }}>
                 {[
                   { label: "Total Disbursed", value: `₹${(payrollTrend.reduce((s, r) => s + r.total, 0)/1000).toFixed(0)}K`, color: "var(--accent-purple)" },
                   { label: "Peak Month",      value: payrollTrend.reduce((a, b) => a.total > b.total ? a : b).month,           color: "var(--accent-blue)"   },
@@ -347,7 +347,7 @@ export default function ReportsPage() {
 
       {/* ── Employee ── */}
       {active === "employee" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           <div className="card" style={{ padding: "20px 20px 12px" }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Employee Growth</div>
             {empLoading ? <Spinner /> : empStats.growthTrend.length === 0 ? <EmptyChart label="growth" /> : (
@@ -408,7 +408,7 @@ export default function ReportsPage() {
 
       {/* ── Documents ── */}
       {active === "document" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
           <div className="card" style={{ padding: "18px 20px" }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Document Summary</div>
             <div style={{ textAlign: "center", padding: "20px 0" }}>
