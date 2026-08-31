@@ -38,6 +38,7 @@ type Emp = {
   status: string;
   password?: string;
   profileCompletion?: number;
+  companyId?: string;
 };
 
 const TABS = ["Overview", "Attendance", "Leaves", "Payroll", "Documents", "Tasks", "Activity"];
@@ -462,6 +463,7 @@ export default function EmployeeProfilePage() {
           status:         d.status         ?? "Active",
           password:       d.password       ?? "",
           profileCompletion: d.profileCompletion ?? 0,
+          companyId:      d.companyId      ?? "",
         });
       } else {
         toast.error("Employee not found");

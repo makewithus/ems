@@ -149,7 +149,7 @@ export function SplitLayout({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
-        height: "100vh",
+        height: "100dvh",
         width: "100%",
         overflow: "hidden",
       }}
@@ -170,20 +170,20 @@ export function SplitLayout({ children }: { children: React.ReactNode }) {
       <div
         style={{
           display: "flex",
+          flexDirection: "column",
           height: "100%",
-          alignItems: "center",
-          justifyContent: "center",
           background: "var(--bg-primary)",
           padding: "clamp(16px, 4vw, 48px)",
           position: "relative",
-          overflow: "hidden",
+          overflowY: "auto",
+          overflowX: "hidden",
         }}
         className="w-full md:w-[45%]"
       >
         <div style={{ position: "absolute", bottom: -50, right: -50, opacity: 0.03, pointerEvents: "none" }}>
           <Building2 size={400} />
         </div>
-        <div style={{ width: "100%", maxWidth: 400, position: "relative", zIndex: 10 }}>
+        <div style={{ width: "100%", maxWidth: 400, margin: "auto", position: "relative", zIndex: 10 }}>
           {children}
         </div>
       </div>
