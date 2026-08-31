@@ -457,6 +457,7 @@ export default function AdminDashboard() {
                 key={r.id}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
+                  flexWrap: "wrap", gap: 10,
                   padding: "10px 12px", borderRadius: "var(--radius-sm)",
                   background: i % 2 === 0 ? "rgba(255,255,255,0.015)" : "transparent",
                   opacity: processingId === r.id ? 0.5 : 1,

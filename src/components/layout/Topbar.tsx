@@ -200,7 +200,7 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
 
       {showSignOutModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div className="card" style={{ padding: 32, width: 400, boxShadow: "var(--shadow-lg)" }}>
+          <div className="card" style={{ padding: 32, width: "100%", maxWidth: 400, boxShadow: "var(--shadow-lg)" }}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Sign Out</div>
             <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 24 }}>
               Are you sure you want to sign out of your account?

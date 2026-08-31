@@ -190,7 +190,7 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
     >
       <div
         className="card"
-        style={{ padding: 32, width: 560, background: "var(--bg-primary)", maxHeight: "90vh", overflowY: "auto" }}
+        style={{ padding: 32, width: "100%", maxWidth: 560, background: "var(--bg-primary)", maxHeight: "90vh", overflowY: "auto" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
@@ -566,7 +566,7 @@ export default function EmployeeProfilePage() {
       </div>
 
       {/* Body */}
-      <div style={{ display: "grid", gridTemplateColumns: "clamp(220px, 22%, 280px) 1fr", gap: 20 }}>
+      <div className="emp-profile-grid" style={{ display: "grid", gap: 20 }}>
         {/* Left sidebar */}
         <div>
           {/* Avatar card */}
@@ -656,7 +656,7 @@ export default function EmployeeProfilePage() {
           {/* Tab content */}
           {tab === "Overview" && (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
                 {[
                   ["Employment Type", emp.employmentType],
                   ["Gender",          emp.gender || "—"],

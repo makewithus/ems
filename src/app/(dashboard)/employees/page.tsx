@@ -98,7 +98,7 @@ function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
-      <div className="card" style={{ padding: 28, width: 440, background: "var(--bg-primary)" }} onClick={(e) => e.stopPropagation()}>
+      <div className="card" style={{ padding: 28, width: "100%", maxWidth: 440, background: "var(--bg-primary)" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ fontSize: 15, fontWeight: 700 }}>Portal Credentials</div>
           <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={onClose}><EyeOff size={16} /></button>

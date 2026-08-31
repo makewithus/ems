@@ -315,7 +315,7 @@ export default function AttendancePage() {
           {/* ── Daily Overview Tab ── */}
           {adminTab === "overview" && (
             <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+              <div className="att-stats-grid" style={{ display: "grid", gap: 14, marginBottom: 20 }}>
                 {[
                   { label: "Present",  value: stats.Present,     color: "var(--accent-green)" },
                   { label: "Absent",   value: stats.Absent,      color: "var(--accent-red)" },

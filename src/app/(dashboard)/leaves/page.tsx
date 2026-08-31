@@ -215,7 +215,7 @@ export default function LeavesPage() {
 
       {/* Admin Summary Stats */}
       {isAdmin && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 24 }}>
+        <div className="att-stats-grid" style={{ display: "grid", gap: 12, marginBottom: 24 }}>
           {[
             { label: "Total Requests", value: requests.length, color: "var(--text-primary)" },
             { label: "Pending", value: requests.filter(r => r.status === "Pending").length, color: "var(--accent-amber)" },
@@ -300,7 +300,7 @@ export default function LeavesPage() {
       {!loading && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {filtered.map((r) => (
-            <div key={r.id} className="card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div key={r.id} className="card leave-card" style={{ padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--accent-blue-dim)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: "var(--accent-blue)" }}>
                   {r.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}

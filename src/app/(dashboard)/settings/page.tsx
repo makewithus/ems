@@ -53,7 +53,7 @@ function PermissionsModal({ role, onClose }: { role: string; onClose: () => void
   const toggle = (key: PermissionKey) => { if (!isSuperAdmin) setPerms((p) => ({ ...p, [key]: !p[key] })); };
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200 }} onClick={onClose}>
-      <div className="card" style={{ padding:0,width:560,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden" }} onClick={(e)=>e.stopPropagation()}>
+      <div className="card" style={{ padding:0,width:"100%",maxWidth:560,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden" }} onClick={(e)=>e.stopPropagation()}>
         <div style={{ padding:"20px 24px",borderBottom:"1px solid var(--border)",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
           <div><div style={{ fontSize:15,fontWeight:700 }}>Configure Permissions — {role}</div><div style={{ fontSize:12,color:"var(--text-muted)",marginTop:2 }}>{isSuperAdmin?"Super Admin has full access (locked)":"Toggle access for this role"}</div></div>
           <button className="btn btn-ghost" style={{ padding:"6px 8px" }} onClick={onClose}><X size={16}/></button>
@@ -384,7 +384,7 @@ function PersonalInfoContent() {
           </div>
 
           {/* Read-only details */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 24 }}>
             <Row label="First Name"       value={empData.firstName} />
             <Row label="Last Name"        value={empData.lastName} />
             <Row label="Employee ID"      value={empData.employeeId} />
@@ -512,7 +512,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div style={{ display:"grid",gridTemplateColumns:"240px 1fr",gap:20 }}>
+      <div className="settings-grid" style={{ display:"grid",gap:20 }}>
         <div style={{ display:"flex",flexDirection:"column",gap:4 }}>
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
@@ -546,7 +546,7 @@ export default function SettingsPage() {
           {activeTab === "leavePolicy" && isAdmin && (
             <div>
               <h2 style={{ fontSize:16,fontWeight:700,marginBottom:16 }}>Leave Policy Setup</h2>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))",gap:16,marginBottom:20 }}>
                 {[{label:"Casual Leaves Yearly",id:"lv-cas",def:"12"},{label:"Medical Leaves Yearly",id:"lv-med",def:"10"},{label:"Paid Leaves Yearly",id:"lv-paid",def:"15"},{label:"Emergency Leaves",id:"lv-emer",def:"5"}].map((f)=>(
                   <div key={f.id}><label style={{ fontSize:13,color:"var(--text-secondary)",display:"block",marginBottom:6 }}>{f.label}</label><input id={f.id} className="input-base" type="number" defaultValue={f.def}/></div>
                 ))}

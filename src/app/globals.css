@@ -430,13 +430,23 @@ tbody td {
 
   /* Stats grid min size smaller */
   .stats-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   }
 
   /* Tables scroll horizontally */
   .table-container {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Modals: never overflow viewport ── */
+  .card {
+    max-width: calc(100vw - 32px) !important;
+  }
+
+  /* ── Page title smaller on mobile ── */
+  .page-title {
+    font-size: 18px;
   }
 }
 
@@ -448,6 +458,72 @@ tbody td {
 
   .charts-grid {
     grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+
+/* ============================================================
+   COMPONENT LAYOUT DEFAULTS (desktop)
+   ============================================================ */
+
+/* Employee profile — sidebar + content */
+.emp-profile-grid {
+  grid-template-columns: clamp(220px, 22%, 280px) 1fr;
+}
+
+/* Settings — sidebar tabs + content */
+.settings-grid {
+  grid-template-columns: 240px 1fr;
+}
+
+/* Attendance / Leaves — stat cards */
+.att-stats-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* ============================================================
+   COMPONENT LAYOUT — Mobile overrides
+   ============================================================ */
+@media (max-width: 767px) {
+  /* Employee profile: stack sidebar above content */
+  .emp-profile-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Settings: stack tabs + content vertically */
+  .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+  /* Settings tab list becomes horizontal scrollable row */
+  .settings-grid > div:first-child {
+    flex-direction: row !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 2px !important;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Attendance/Leaves stat cards: 2 columns on mobile */
+  .att-stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Documents: hide sidebar, full-width content */
+  .doc-sidebar {
+    display: none !important;
+  }
+  .doc-content {
+    padding: 20px 16px !important;
+  }
+  .doc-layout {
+    padding: 0 !important;
+  }
+
+  /* Leave request cards: stack vertically */
+  .leave-card {
+    flex-direction: column !important;
+    align-items: flex-start !important;
   }
 }
 

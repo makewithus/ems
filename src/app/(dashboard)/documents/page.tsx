@@ -505,7 +505,7 @@ export default function DocumentsPage() {
   const getFolderCount = (fId: string) => files.filter((f) => f.folderId === fId).length;
 
   return (
-    <div className="page-container" style={{ display: "flex", gap: 0, padding: 0 }}>
+    <div className="page-container doc-layout" style={{ display: "flex", gap: 0, padding: 0 }}>
       {/* Modals */}
       {editingFile && (
         <EditDocModal
@@ -524,7 +524,7 @@ export default function DocumentsPage() {
       )}
 
       {/* Left: Folder Tree - Editorial style */}
-      <div style={{ width: 260, minWidth: 260, borderRight: "1px solid var(--border)", padding: "32px 16px", overflowY: "auto", background: "var(--bg-secondary)" }}>
+      <div className="doc-sidebar" style={{ width: 260, minWidth: 260, borderRight: "1px solid var(--border)", padding: "32px 16px", overflowY: "auto", background: "var(--bg-secondary)" }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "0.1em", textTransform: "uppercase", padding: "0 10px", marginBottom: 16 }}>Archive System</div>
         
         <button
@@ -612,7 +612,7 @@ export default function DocumentsPage() {
       </div>
 
       {/* Right: Content */}
-      <div style={{ flex: 1, padding: 48, overflowY: "auto", background: "var(--bg-primary)" }}>
+      <div className="doc-content" style={{ flex: 1, padding: 48, overflowY: "auto", background: "var(--bg-primary)" }}>
         {/* Breadcrumb */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 32, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           <span style={{ cursor: "pointer", color: "var(--text-primary)" }} onClick={() => setSelectedFolder(null)}>Archive</span>
@@ -768,7 +768,7 @@ export default function DocumentsPage() {
       {/* Upload Modal */}
       {showUpload && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(9,9,9,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div className="card" style={{ padding: 40, width: 500, background: "var(--bg-primary)" }}>
+          <div className="card" style={{ padding: 40, width: "100%", maxWidth: 500, background: "var(--bg-primary)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24, alignItems: "center" }}>
               <div style={{ fontSize: 14, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>Upload Record</div>
               <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setShowUpload(false)}><X size={18} /></button>
