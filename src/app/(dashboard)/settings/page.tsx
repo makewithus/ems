@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import {
   Building2, Shield, CalendarDays, DollarSign, Mail, Palette,
-  X, Check, Save, User, Trash2, Tags, Loader2,
+  X, Check, Save, User, Trash2, Tags, Loader2, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
@@ -287,13 +287,6 @@ function PersonalInfoContent() {
     };
     load();
   }, [profile?.employeeId, user?.uid]);
-
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setPhotoFile(e.target.files[0]);
-      setPhotoPreview(URL.createObjectURL(e.target.files[0]));
-    }
-  };
 
   // Calculate live profile completion (6 fields: phone, dob, address, ecName, ecPhone, ecRelation)
   const checkFields = [phone, dob, address, ecName, ecPhone, ecRelation];
