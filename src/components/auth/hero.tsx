@@ -158,7 +158,6 @@ export function SplitLayout({ children }: { children: React.ReactNode }) {
       {/* Left — hero, hidden on mobile */}
       <div
         style={{
-          display: "flex",
           flexDirection: "column",
           height: "100%",
         }}
