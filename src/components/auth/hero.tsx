@@ -98,7 +98,7 @@ export function HeroSection() {
           {/* Stat blocks - Brutalist */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 0, marginTop: 48, border: "1px solid var(--border-strong)", width: "fit-content" }}>
             {[
-              { label: "Core Modules", value: "10+" },
+              { label: "Workforce", value: "360°" },
               { label: "System Access", value: "24/7" },
               { label: "Secure Access", value: "99.9%" },
             ].map((s, i) => (
