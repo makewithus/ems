@@ -224,9 +224,9 @@ service cloud.firestore {
       allow write: if isHRAdmin();
     }
 
-    // ── /activityLogs ────────────────────────────────────────────────────
-    match /activityLogs/{logId} {
-      allow read:   if isHRAdmin();
+    // ── /auditLogs ────────────────────────────────────────────────────
+    match /auditLogs/{logId} {
+      allow read:   if false;
       allow create: if isSignedIn();
     }
   }

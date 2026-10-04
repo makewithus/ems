@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 import { createEmployeeAuth } from "@/lib/firebase-secondary";
 import { useAuthStore } from "@/store/auth.store";
+import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
   firstName:      z.string().min(1, "Required"),
@@ -72,7 +73,7 @@ const RuleItem = ({ valid, label }: { valid: boolean; label: string }) => (
 
 export default function AddEmployeePage() {
   const router = useRouter();
-  const { companyId } = useAuthStore();
+  const { companyId, user, role, profile } = useAuthStore();
   const { departments } = useDepartments();
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
@@ -190,6 +191,16 @@ export default function AddEmployeePage() {
         createdAt: now,
         updatedAt: now,
       });
+
+      await logAudit(
+        user?.uid || 'system',
+        profile ? `${profile.firstName} ${profile.lastName}` : (user?.email || 'System'),
+        role || 'EMPLOYEE',
+        'CREATE_EMPLOYEE',
+        'EMPLOYEE',
+        uid,
+        `Onboarded employee ${data.firstName} ${data.lastName} (${data.employeeId})`
+      );
 
       setSavedCreds({ employeeId: data.employeeId, email, password: data.password });
       setSubmitted(true);
