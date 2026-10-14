@@ -161,12 +161,7 @@ export function AdminLoginForm() {
   const onSubmit = async (data: AdminFormData) => {
     setServerError("");
     try {
-      const { role } = await signIn(data.email, data.password);
-      if (role === "employee") {
-        await useAuthStore.getState().signOut();
-        setServerError("This account does not have admin access.");
-        return;
-      }
+      await signIn(data.email, data.password, "admin");
       window.location.href = "/dashboard";
     } catch (err: unknown) {
       const raw = err instanceof Error ? err.message : "";
@@ -314,11 +309,7 @@ export function EmployeeLoginForm() {
             const empEmail = empSnap.docs[0].data().email;
             if (empEmail) {
               try {
-                const { role } = await signIn(empEmail, data.password);
-                if (role === "super_admin" || role === "hr_admin") {
-                  await useAuthStore.getState().signOut();
-                  throw new Error("This account is an admin account. Please use the admin portal.");
-                }
+                await signIn(empEmail, data.password, "employee");
                 targetEmail = empEmail;
                 signedIn = true;
               } catch (err: any) {
@@ -345,11 +336,7 @@ export function EmployeeLoginForm() {
           ];
           for (const currentEmail of emailsToTry) {
             try {
-              const { role } = await signIn(currentEmail, data.password);
-              if (role === "super_admin" || role === "hr_admin") {
-                await useAuthStore.getState().signOut();
-                throw new Error("This account is an admin account. Please use the admin portal.");
-              }
+              await signIn(currentEmail, data.password, "employee");
               targetEmail = currentEmail;
               signedIn = true;
               break;
@@ -365,11 +352,7 @@ export function EmployeeLoginForm() {
       } else {
         // If logging in by email, just try once
         try {
-          const { role } = await signIn(targetEmail, data.password);
-          if (role === "super_admin" || role === "hr_admin") {
-            await useAuthStore.getState().signOut();
-            throw new Error("This account is an admin account. Please use the admin portal.");
-          }
+          await signIn(targetEmail, data.password, "employee");
           signedIn = true;
         } catch (err: any) {
           lastError = err;

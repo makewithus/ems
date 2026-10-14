@@ -11,7 +11,7 @@ interface TopbarProps { onMenuToggle: () => void; }
 
 export default function Topbar({ onMenuToggle }: TopbarProps) {
   const router = useRouter();
-  const { profile, signOut } = useAuthStore();
+  const { profile, role, signOut } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
@@ -159,7 +159,7 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
               {profile?.displayName ?? "User"}
             </span>
             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-              {roleBadge[profile?.role ?? "employee"] ?? "Employee"}
+              {roleBadge[role ?? "employee"] ?? "Employee"}
             </span>
           </div>
           <ChevronDown size={13} color="var(--text-muted)" />

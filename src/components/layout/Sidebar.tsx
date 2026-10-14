@@ -37,7 +37,7 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { role } = useAuthStore();
 
-  const filtered = NAV.filter((n) => !role || n.roles.includes(role));
+  const filtered = NAV.filter((n) => role && n.roles.includes(role));
   const showEmployer = role && EMPLOYER_SECTION.roles.includes(role);
 
   const linkStyle = (active: boolean, accentColor?: string) => ({

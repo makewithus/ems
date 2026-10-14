@@ -15,6 +15,10 @@ const ADMIN_ONLY_PATHS = [
   "/employer",
 ];
 
+function normalizeRole(role: string | undefined) {
+  return role?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
@@ -33,7 +37,7 @@ export function middleware(request: NextRequest) {
   }
 
   // ── Strict Portal Isolation — employees cannot access admin paths ──
-  const roleCookie = request.cookies.get("ems-role")?.value;
+  const roleCookie = normalizeRole(request.cookies.get("ems-role")?.value);
 
   if (sessionCookie) {
     const isEmployee = roleCookie === "employee" || !roleCookie;

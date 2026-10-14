@@ -34,7 +34,7 @@ const db = getFirestore(app);
 async function run() {
   try {
     const email = "admin_test@makewithus.in";
-    const pass = "admin123456";
+    const pass = "admin12345";
 
     let uid;
     try {
