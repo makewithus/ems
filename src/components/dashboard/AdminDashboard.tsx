@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import {
   Users, Clock, CalendarDays, DollarSign,
   FolderOpen, Cake, Megaphone,
-  Check, X, Loader2,
+  Check, X, Loader2, CheckCircle2,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -287,7 +287,7 @@ export default function AdminDashboard() {
     { label: "Pending Leaves",      value: String(pendingLeaves.length || 0), icon: CalendarDays, color: "var(--accent-amber)",  delta: "Requires HR approval" },
     { label: "Payroll This Month",  value: payrollTotal > 0 ? formatPayroll(payrollTotal) : "—", icon: DollarSign, color: "var(--accent-purple)", delta: new Date().toLocaleString("default", { month: "long" }) },
     { label: "Documents",           value: String(documentCount || 0),  icon: FolderOpen,  color: "var(--accent-blue)",   delta: "Total files" },
-    { label: "Birthdays This Week", value: String(birthdayCount || 0),  icon: Cake,        color: "var(--accent-amber)",  delta: birthdayCount > 0 ? "Send wishes! 🎂" : "No birthdays" },
+    { label: "Birthdays This Week", value: String(birthdayCount || 0),  icon: Cake,        color: "var(--accent-amber)",  delta: birthdayCount > 0 ? "Upcoming celebrations" : "No birthdays" },
     { label: "New Notices",         value: String(noticeCount || 0),    icon: Megaphone,   color: "var(--accent-red)",    delta: "This week" },
   ];
 
@@ -447,8 +447,9 @@ export default function AdminDashboard() {
             <span style={{ fontSize: 13 }}>Loading requests…</span>
           </div>
         ) : pendingLeaves.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)", fontSize: 13 }}>
-            ✅ No pending leave requests
+          <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-muted)", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <CheckCircle2 size={16} color="var(--accent-green)" />
+            <span>All leave requests are up to date.</span>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>

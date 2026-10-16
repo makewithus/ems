@@ -4,7 +4,8 @@ import { createPortal } from "react-dom";
 import {
   FolderOpen, Upload, Search, Grid3X3, List, Star, Pin,
   FileText, Image, File, MoreHorizontal, Download, Eye,
-  ChevronRight, X, Edit2, Trash2, Loader2, Info
+  ChevronRight, X, Edit2, Trash2, Loader2, Info,
+  Users, DollarSign, Award, FileCheck, ShieldCheck, Shield, BookOpen, FolderLock
 } from "lucide-react";
 import { fileSizeLabel, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
@@ -16,15 +17,15 @@ import {
 import { useAuthStore } from "@/store/auth.store";
 
 const FOLDERS = [
-  { id: "1", name: "Employee Documents", icon: "👤" },
-  { id: "2", name: "Offer Letters",       icon: "📄" },
-  { id: "3", name: "Payslips",            icon: "💰" },
-  { id: "4", name: "Certificates",        icon: "🏆" },
-  { id: "5", name: "Contracts",           icon: "📝" },
-  { id: "6", name: "ID Proof",            icon: "🪪" },
-  { id: "7", name: "Company Policies",    icon: "📋" },
-  { id: "8", name: "Training Material",   icon: "📚" },
-  { id: "9", name: "HR Files",            icon: "🗂️" },
+  { id: "1", name: "Employee Documents", icon: Users },
+  { id: "2", name: "Offer Letters",       icon: FileText },
+  { id: "3", name: "Payslips",            icon: DollarSign },
+  { id: "4", name: "Certificates",        icon: Award },
+  { id: "5", name: "Contracts",           icon: FileCheck },
+  { id: "6", name: "ID Proof",            icon: ShieldCheck },
+  { id: "7", name: "Company Policies",    icon: Shield },
+  { id: "8", name: "Training Material",   icon: BookOpen },
+  { id: "9", name: "HR Files",            icon: FolderLock },
 ];
 
 const FILE_ICON: Record<string, React.ReactNode> = {
@@ -169,7 +170,7 @@ function EditDocModal({
               <option value="">No Folder (Root)</option>
               {FOLDERS.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.icon} {f.name}
+                  {f.name}
                 </option>
               ))}
             </select>
@@ -569,7 +570,7 @@ export default function DocumentsPage() {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 14 }}>{f.icon}</span>
+                <f.icon size={14} style={{ opacity: isSelected ? 1 : 0.7 }} />
                 <span style={{ fontWeight: 500 }}>{f.name}</span>
               </div>
               <span style={{
@@ -649,7 +650,10 @@ export default function DocumentsPage() {
             {/* Pinned Documents */}
             {!selectedFolder && specialFilter === "all" && files.filter(f => f.pinned).length > 0 && (
               <div style={{ marginBottom: 40 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16 }}>📌 Pinned Records</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Pin size={13} color="var(--brand-red)" />
+                  <span>Pinned Records</span>
+                </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
                   {files.filter((f) => f.pinned).map((f) => (
                     <div key={f.id} className="card" style={{ padding: "16px", display: "flex", alignItems: "center", gap: 14, cursor: "pointer", borderLeft: "4px solid var(--brand-red)" }} onClick={() => setPreview(f)}>
@@ -785,7 +789,7 @@ export default function DocumentsPage() {
                 <select className="input-base" value={uploadFolder} onChange={(e) => setUploadFolder(e.target.value)}>
                   <option value="">No Folder (Root)</option>
                   {FOLDERS.map((f) => (
-                    <option key={f.id} value={f.id}>{f.icon} {f.name}</option>
+                    <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
                 </select>
               </div>

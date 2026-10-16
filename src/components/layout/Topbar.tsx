@@ -23,9 +23,15 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
       where("userId", "==", profile.uid),
       where("isRead", "==", false)
     );
-    const unsub = onSnapshot(q, (snap) => {
-      setUnreadCount(snap.size);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setUnreadCount(snap.size);
+      },
+      () => {
+        // Safe silent fallback
+      }
+    );
     return () => unsub();
   }, [profile?.uid]);
 

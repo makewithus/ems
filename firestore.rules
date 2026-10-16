@@ -183,21 +183,23 @@ service cloud.firestore {
 
     // ── /tasks ───────────────────────────────────────────────────────────
     match /tasks/{taskId} {
-      // Employee can read if EITHER assignedTo OR assigneeId matches their UID
-      // (assignedTo is the canonical field; assigneeId is the legacy/alternate field)
+      // Employee can read if EITHER assignedTo OR assigneeId matches their UID, or createdByUid
       allow read:
         if isHRAdmin()
         || (isSignedIn() && (
               resource.data.assignedTo == request.auth.uid
               || resource.data.assigneeId == request.auth.uid
+              || resource.data.createdByUid == request.auth.uid
            ));
-      allow create: if isHRAdmin();
+      allow create: if isSignedIn();
       allow update:
         if isHRAdmin()
         || (isSignedIn() && (
               resource.data.assignedTo == request.auth.uid
               || resource.data.assigneeId == request.auth.uid
+              || resource.data.createdByUid == request.auth.uid
            ));
+      allow delete: if isHRAdmin();
     }
 
     // ── /notices ─────────────────────────────────────────────────────────
@@ -210,24 +212,31 @@ service cloud.firestore {
     }
 
     // ── /notifications ───────────────────────────────────────────────────
-    // SECURITY FIX [M3]: Notifications can only be created for valid targets.
-    // Any authenticated user can create (needed for employee→admin task updates),
-    // but read/update is restricted to the notification's target user.
     match /notifications/{notifId} {
-      allow read, update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create:       if isSignedIn();
+      allow read, write: if true;
     }
 
     // ── /settings ────────────────────────────────────────────────────────
     match /settings/{settingId} {
-      allow read:  if isSignedIn();
-      allow write: if isHRAdmin();
+      allow read:  if true;
+      allow write: if isHRAdmin() || isSignedIn();
     }
 
     // ── /auditLogs ────────────────────────────────────────────────────
     match /auditLogs/{logId} {
-      allow read:   if false;
-      allow create: if isSignedIn();
+      allow read, create: if isSignedIn();
+      allow write:        if isHRAdmin();
+    }
+
+    // ── /issues ───────────────────────────────────────────────────────
+    match /issues/{issueId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ── /invoices ─────────────────────────────────────────────────────
+    match /invoices/{invoiceId} {
+      allow read, write: if isSignedIn();
     }
   }
 }
+

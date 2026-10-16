@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { Check, AlertTriangle } from "lucide-react";
 
 interface VoiceWidgetProps {
   sidebarOpen?: boolean;
@@ -272,8 +273,8 @@ export default function VoiceWidget({ sidebarOpen = true }: VoiceWidgetProps) {
                 alignItems: "center",
               }}
             >
-              <span style={{ color: "#22c55e", fontSize: "11px" }}>
-                ✓ Doc connected
+              <span style={{ color: "#22c55e", fontSize: "11px", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <Check size={12} strokeWidth={2.5} /> Doc connected
               </span>
               <button
                 onClick={() => setDocId("")}
@@ -502,20 +503,24 @@ export default function VoiceWidget({ sidebarOpen = true }: VoiceWidgetProps) {
                     fontSize: "12px",
                   }}
                 >
-                  {loading ? "..." : "✓ Confirm"}
+                  {loading ? "..." : (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <Check size={12} strokeWidth={2.5} /> Confirm
+                    </span>
+                  )}
                 </button>
               </div>
             </div>
           )}
 
           {error && (
-            <p style={{ color: "#ef4444", fontSize: "11px", margin: 0 }}>
-              ⚠️ {error}
+            <p style={{ color: "#ef4444", fontSize: "11px", margin: 0, display: "flex", alignItems: "center", gap: 4 }}>
+              <AlertTriangle size={12} /> {error}
             </p>
           )}
           {success && (
-            <p style={{ color: "#22c55e", fontSize: "11px", margin: 0 }}>
-              ✓ {success}
+            <p style={{ color: "#22c55e", fontSize: "11px", margin: 0, display: "flex", alignItems: "center", gap: 4 }}>
+              <Check size={12} strokeWidth={2.5} /> {success}
             </p>
           )}
         </div>

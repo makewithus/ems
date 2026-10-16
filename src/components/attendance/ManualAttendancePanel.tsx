@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, Users, CheckCircle2,
   XCircle, Clock, AlertCircle, X, Save, Loader2,
   CalendarDays, PenLine, Search,
-  UserCheck, ListChecks, Pencil, CalendarClock,
+  UserCheck, ListChecks, Pencil, CalendarClock, Lock, Check,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from "firebase/firestore";
@@ -129,8 +129,16 @@ function MarkDialog({
             }}>
               {existing.status}
             </span>
-            <span style={{ color:"var(--text-muted)", fontSize:11, marginLeft:"auto" }}>
-              {existing.manuallyMarked ? "✏️ Manually marked" : "🔒 Employee self-marked"}
+            <span style={{ color:"var(--text-muted)", fontSize:11, marginLeft:"auto", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              {existing.manuallyMarked ? (
+                <>
+                  <Pencil size={11} /> Manually marked
+                </>
+              ) : (
+                <>
+                  <Lock size={11} /> Employee self-marked
+                </>
+              )}
             </span>
           </div>
         )}
@@ -157,7 +165,7 @@ function MarkDialog({
               >
                 <span style={{ width:8, height:8, borderRadius:"50%", background:s.color, flexShrink:0 }} />
                 {s.label}
-                {status === s.value && <span style={{ marginLeft:"auto", fontSize:10 }}>✓</span>}
+                {status === s.value && <Check size={12} style={{ marginLeft:"auto" }} />}
               </button>
             ))}
           </div>

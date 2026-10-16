@@ -5,6 +5,7 @@ import {
   ArrowLeft, Edit2, UserCheck, UserX, Mail, Phone,
   MapPin, Building2, Calendar, DollarSign, Loader2,
   Save, X, ChevronDown, Eye, EyeOff, CalendarClock,
+  KeyRound, ClipboardList,
 } from "lucide-react";
 import { formatDate, getInitials, formatCurrency, EMPLOYMENT_TYPES } from "@/lib/utils";
 import { useDepartments } from "@/hooks/useDepartments";
@@ -219,8 +220,9 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
           
           {/* Credentials Section */}
           <div style={{ gridColumn: "1/-1", borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 8 }}>
-            <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>
-              🔐 Portal Credentials
+            <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+              <KeyRound size={14} color="var(--brand-red)" />
+              <span>Portal Credentials</span>
             </h3>
           </div>
           <div style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -680,7 +682,9 @@ export default function EmployeeProfilePage() {
 
           {tab !== "Overview" && (
             <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>
-              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.4 }}>📋</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+                <ClipboardList size={32} style={{ opacity: 0.4 }} />
+              </div>
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>{tab}</div>
               <div style={{ fontSize: 13 }}>Live {tab.toLowerCase()} data loads here from Firestore.</div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, X, GripVertical, ChevronDown, Loader2, ClipboardList } from "lucide-react";
+import { Plus, X, GripVertical, ChevronDown, Loader2, ClipboardList, User, Calendar } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { formatDate, TASK_STATUS } from "@/lib/utils";
 import { toast } from "sonner";
@@ -69,13 +69,12 @@ export default function TasksPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
 
-  /* ── Load employees for the picker (admins only) ── */
+  /* ── Load employees for the picker ── */
   /* We load from the `users` collection because the Firestore doc ID equals
      the Firebase Auth UID — this is what we store in `assigneeId` and what
      the employee's own query uses via user.uid. */
   useEffect(() => {
-    if (!isAdmin) return;
-    // No orderBy to avoid composite index requirement; sort in-memory
+    // Load for both admin and employees
     const q = query(
       collection(db, "users"),
       where("role", "==", "employee")
@@ -83,14 +82,24 @@ export default function TasksPage() {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const empList = snap.docs
+        let empList = snap.docs
           .map((d) => ({
             uid: d.id,                          // doc ID == Auth UID
             name: d.data().displayName ?? d.data().email ?? d.id,
             employeeId: d.data().employeeId ?? d.id,
           }))
-          .filter((e) => e.name) // skip blank entries
-          .sort((a, b) => a.name.localeCompare(b.name)); // sort in-memory
+          .filter((e) => e.name); // skip blank entries
+
+        // Ensure current employee is in the list
+        if (user?.uid && !empList.some((e) => e.uid === user.uid)) {
+          empList.push({
+            uid: user.uid,
+            name: profile?.displayName || user.displayName || user.email || "Me",
+            employeeId: (profile as any)?.employeeId || "Current User",
+          });
+        }
+
+        empList.sort((a, b) => a.name.localeCompare(b.name)); // sort in-memory
         setEmployees(empList);
       },
       (err) => {
@@ -98,7 +107,7 @@ export default function TasksPage() {
       }
     );
     return () => unsub();
-  }, [isAdmin]);
+  }, [user?.uid, profile?.displayName, user?.displayName, user?.email]);
 
   /* ── Real-time tasks listener ── */
   useEffect(() => {
@@ -107,6 +116,7 @@ export default function TasksPage() {
 
     let unsub: (() => void) | undefined;
     let unsub2: (() => void) | undefined;
+    let unsub3: (() => void) | undefined;
     const taskMap = new Map<string, Task>();
 
     const mergeAndSet = () => {
@@ -152,11 +162,12 @@ export default function TasksPage() {
     } else {
       // Employees: query by assigneeId (Firebase Auth UID stored in users doc)
       // AND by assignedTo (alternate field) — handles any legacy data inconsistencies
+      // AND by createdByUid (tasks created by this employee)
       const q1 = query(collection(db, "tasks"), where("assigneeId", "==", user.uid));
       const q2 = query(collection(db, "tasks"), where("assignedTo", "==", user.uid));
+      const q3 = query(collection(db, "tasks"), where("createdByUid", "==", user.uid));
 
-      // Both listeners write into the same Map — deduplication is automatic.
-      // Each listener independently triggers a re-render on updates.
+      // All listeners write into the same Map — deduplication is automatic.
       unsub = onSnapshot(
         q1,
         (snap) => { snap.docs.forEach((d) => taskMap.set(d.id, mapDoc(d))); mergeAndSet(); },
@@ -167,11 +178,17 @@ export default function TasksPage() {
         (snap) => { snap.docs.forEach((d) => taskMap.set(d.id, mapDoc(d))); mergeAndSet(); },
         (err) => { console.error("Tasks (assignedTo) error:", err); setLoading(false); }
       );
+      unsub3 = onSnapshot(
+        q3,
+        (snap) => { snap.docs.forEach((d) => taskMap.set(d.id, mapDoc(d))); mergeAndSet(); },
+        (err) => { console.error("Tasks (createdByUid) error:", err); setLoading(false); }
+      );
     }
 
     return () => {
       unsub?.();
       unsub2?.();
+      unsub3?.();
     };
   }, [user?.uid, role, isAdmin]);
 
@@ -228,6 +245,7 @@ export default function TasksPage() {
     setSaving(true);
     try {
       const companyId = profile?.companyId || "default";
+      const creatorName = profile?.displayName || user?.displayName || (isAdmin ? "Admin" : "Employee");
       await addDoc(collection(db, "tasks"), {
         companyId,
         title: newTask.title.trim(),
@@ -239,24 +257,27 @@ export default function TasksPage() {
         assigneeId: newTask.assigneeId,
         assigneeName: newTask.assigneeName,
         assignedTo: newTask.assigneeId, // Added for security rules check
-        createdBy: profile?.displayName ?? "Admin",
+        createdBy: creatorName,
+        createdByUid: user?.uid || "",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      // Dispatch notification to employee
-      await addDoc(collection(db, "notifications"), {
-        companyId,
-        userId: newTask.assigneeId,
-        title: "New Task Assigned",
-        message: `Admin assigned a new task: "${newTask.title.trim()}"`,
-        type: "task",
-        isRead: false,
-        link: "/tasks",
-        createdAt: serverTimestamp(),
-      });
+      // Dispatch notification to employee if not self-assigned
+      if (newTask.assigneeId && newTask.assigneeId !== user?.uid) {
+        await addDoc(collection(db, "notifications"), {
+          companyId,
+          userId: newTask.assigneeId,
+          title: "New Task Assigned",
+          message: `${creatorName} assigned a new task: "${newTask.title.trim()}"`,
+          type: "task",
+          isRead: false,
+          link: "/tasks",
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+      }
 
-      toast.success(`Task assigned to ${newTask.assigneeName}!`);
+      toast.success(`Task created successfully!`);
       setNewTask({ title: "", desc: "", deadline: "", priority: "Medium", assigneeId: "", assigneeName: "" });
       setShowForm(false);
     } catch {
@@ -339,16 +360,24 @@ export default function TasksPage() {
               </button>
             ))}
           </div>
-          {isAdmin && (
-            <button
-              id="task-create"
-              className="btn btn-primary"
-              style={{ gap: 6 }}
-              onClick={() => setShowForm(true)}
-            >
-              <Plus size={14} /> Assign Task
-            </button>
-          )}
+          <button
+            id="task-create"
+            className="btn btn-primary"
+            style={{ gap: 6 }}
+            onClick={() => {
+              if (!isAdmin && user) {
+                const selfEmp = employees.find((e) => e.uid === user.uid);
+                setNewTask((p) => ({
+                  ...p,
+                  assigneeId: p.assigneeId || user.uid,
+                  assigneeName: p.assigneeName || selfEmp?.name || profile?.displayName || user.displayName || "Me",
+                }));
+              }
+              setShowForm(true);
+            }}
+          >
+            <Plus size={14} /> {isAdmin ? "Assign Task" : "New Task"}
+          </button>
         </div>
       </div>
 
@@ -450,8 +479,14 @@ export default function TasksPage() {
 
                       {/* Assignee + deadline */}
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginBottom: 0 }}>
-                        <span>👤 {t.assigneeName.split(" ")[0]}</span>
-                        {t.deadline && <span>📅 {formatDate(t.deadline)}</span>}
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <User size={11} /> {t.assigneeName.split(" ")[0]}
+                        </span>
+                        {t.deadline && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            <Calendar size={11} /> {formatDate(t.deadline)}
+                          </span>
+                        )}
                       </div>
 
                       {/* Admin-only dropdown status changer (employees use drag) */}
@@ -563,8 +598,8 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* ── Create Task Modal (admins only) ── */}
-      {showForm && isAdmin && (
+      {/* ── Create Task Modal ── */}
+      {showForm && (
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
           onClick={() => setShowForm(false)}
@@ -576,7 +611,7 @@ export default function TasksPage() {
           >
             {/* Modal header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>Assign New Task</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>{isAdmin ? "Assign New Task" : "Create New Task"}</div>
               <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setShowForm(false)}>
                 <X size={16} />
               </button>
@@ -689,7 +724,7 @@ export default function TasksPage() {
                 disabled={saving}
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                {saving ? "Assigning…" : "Assign Task"}
+                {saving ? "Saving…" : (isAdmin ? "Assign Task" : "Create Task")}
               </button>
               <button className="btn btn-secondary" onClick={() => setShowForm(false)} disabled={saving}>
                 Cancel

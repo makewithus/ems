@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   ArrowLeft, Loader2, User, Briefcase, KeyRound, Check,
-  Eye, EyeOff, Copy, CheckCheck, X,
+  Eye, EyeOff, Copy, CheckCheck, X, Lock,
 } from "lucide-react";
 import { EMPLOYMENT_TYPES } from "@/lib/utils";
 import { useDepartments } from "@/hooks/useDepartments";
@@ -237,8 +237,9 @@ export default function AddEmployeePage() {
 
           {/* Credential card */}
           <div className="card" style={{ padding: "22px 24px", marginBottom: 20, textAlign: "left" }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 16 }}>
-              🔐 Portal Login Credentials
+            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}>
+              <KeyRound size={13} color="var(--brand-red)" />
+              <span>Portal Login Credentials</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
@@ -391,8 +392,8 @@ export default function AddEmployeePage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
               {/* Info banner */}
               <div style={{ gridColumn: "1/-1", padding: "14px 16px", background: "var(--accent-blue-dim)", borderRadius: "var(--radius-sm)", border: "1px solid rgba(59,130,246,0.25)", marginBottom: 4 }}>
-                <p style={{ fontSize: 13, color: "var(--accent-blue)", fontWeight: 500, marginBottom: 4 }}>
-                  🔐 Setting employee portal credentials
+                <p style={{ fontSize: 13, color: "var(--accent-blue)", fontWeight: 500, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                  <Lock size={14} /> Setting employee portal credentials
                 </p>
                 <p style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.55 }}>
                   The employee's login email will be generated automatically. Set a password and share it with the employee via WhatsApp. They can log in at <strong>/login/employee</strong>.

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
+import { Check, AlertCircle, X, Sparkles } from "lucide-react";
 
 interface Issue {
   number:   number;
@@ -274,7 +275,7 @@ localStorage.setItem("ems_doc_id", id);
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Doc Connected</p>
                 <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>Open in Google Docs ↗</a>
               </div>
-              <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)" }}>✓ Active</span>
+              <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)", display: "inline-flex", alignItems: "center", gap: 4 }}><Check size={11} strokeWidth={2.5} /> Active</span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => fetchIssues(docId)} style={outlineBtn}>↺ Refresh</button>
@@ -337,7 +338,7 @@ localStorage.setItem("ems_doc_id", id);
               )}
             </div> */}
 
-            {/* {urlError && <p style={{ color: "#ef4444", fontSize: 12, margin: 0 }}>⚠ {urlError}</p>}
+            {/* {urlError && <p style={{ color: "#ef4444", fontSize: 12, margin: 0 }}>{urlError}</p>}
           </div>
         )}
       </div> */}
@@ -361,7 +362,7 @@ localStorage.setItem("ems_doc_id", id);
             <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
               {savedDocs.find(d => d.id === docId)?.name || "Connected Doc"}
             </p>
-            <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)" }}>✓ Active</span>
+            <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)", display: "inline-flex", alignItems: "center", gap: 4 }}><Check size={11} strokeWidth={2.5} /> Active</span>
           </div>
           <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>
             Open in Google Docs ↗
@@ -462,7 +463,7 @@ localStorage.setItem("ems_doc_id", id);
           Connect
         </button>
       </div>
-      {urlError && <p style={{ color: "#ef4444", fontSize: 12, margin: 0 }}>⚠ {urlError}</p>}
+      {urlError && <p style={{ color: "#ef4444", fontSize: 12, margin: 0, display: "flex", alignItems: "center", gap: 5 }}><AlertCircle size={12} /> {urlError}</p>}
       
       {/* Previously connected docs */}
       {savedDocs.length > 0 && (
@@ -549,7 +550,7 @@ localStorage.setItem("ems_doc_id", id);
           onClick={() => { if (!docConnected) { setError("Connect a Google Doc first."); return; } setPanelOpen(!panelOpen); setPreview(null); setError(""); }}
           style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: panelOpen ? "#4f46e5" : "var(--brand-red)", color: "#fff", whiteSpace: "nowrap" as const }}
         >
-          {panelOpen ? "✕ Close" : " Voice / Text"}
+          {panelOpen ? <><X size={14} /> Close</> : <><Sparkles size={14} /> Voice / Text</>}
         </button>
       </div>
 
@@ -609,11 +610,11 @@ localStorage.setItem("ems_doc_id", id);
               <p style={{ fontSize: 13, color: "#3730a3", margin: "0 0 12px", lineHeight: 1.5 }}>{preview.confirmation_message}</p>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button onClick={() => setPreview(null)} style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-secondary)", color: "var(--text-muted)", cursor: "pointer", fontSize: 12 }}>Cancel</button>
-                <button onClick={handleConfirm} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#818cf8", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "..." : "✓ Confirm"}</button>
+                <button onClick={handleConfirm} disabled={loading} style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#818cf8", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>{loading ? "..." : <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><Check size={12} strokeWidth={2.5} /> Confirm</span>}</button>
               </div>
             </div>
           )}
-          {error && <p style={{ color: "#ef4444", fontSize: 12, margin: "8px 0 0" }}>⚠ {error}</p>}
+          {error && <p style={{ color: "#ef4444", fontSize: 12, margin: "8px 0 0", display: "flex", alignItems: "center", gap: 5 }}><AlertCircle size={12} /> {error}</p>}
         </div>
       )}
 

@@ -345,7 +345,7 @@ export default function EmployeeDashboard() {
       value: `${loginStreak} Day${loginStreak !== 1 ? "s" : ""}`,
       icon: Flame,
       color: loginStreak >= 5 ? "var(--accent-amber)" : "var(--text-muted)",
-      sub: loginStreak >= 5 ? "Keep it up! 🔥" : loginStreak > 0 ? "You're on a roll!" : "Clock in to start streak",
+      sub: loginStreak >= 5 ? "Keep it up! Consistent streak" : loginStreak > 0 ? "You're on a roll!" : "Clock in to start streak",
     },
     {
       label: "Salary Status",

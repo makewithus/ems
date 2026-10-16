@@ -66,16 +66,16 @@ export function fileSizeLabel(bytes: number) {
 
 export function getFileIcon(ext: string) {
   const map: Record<string, string> = {
-    pdf: "📄",
-    doc: "📝",
-    docx: "📝",
-    xls: "📊",
-    xlsx: "📊",
-    jpg: "🖼️",
-    jpeg: "🖼️",
-    png: "🖼️",
-    zip: "🗜️",
-    default: "📁",
+    pdf: "PDF",
+    doc: "DOC",
+    docx: "DOCX",
+    xls: "XLS",
+    xlsx: "XLSX",
+    jpg: "IMG",
+    jpeg: "IMG",
+    png: "IMG",
+    zip: "ZIP",
+    default: "FILE",
   };
   return map[ext.toLowerCase()] ?? map.default;
 }
