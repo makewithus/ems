@@ -24,14 +24,14 @@ export function middleware(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   const sessionCookie = request.cookies.get("ems-session")?.value;
 
-  // ── Unauthenticated → redirect to login ──
+  // ── Unauthenticated -> redirect to login ──
   if (!isPublic && !sessionCookie) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // ── Already authenticated trying to visit login → redirect to dashboard ──
+  // ── Already authenticated trying to visit login -> redirect to dashboard ──
   if (isPublic && sessionCookie) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

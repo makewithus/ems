@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const mq = window.matchMedia("(max-width: 767px)");
     const handle = (e: MediaQueryListEvent | MediaQueryList) => {
       setIsMobile(e.matches);
-      setSidebarOpen(!e.matches); // desktop → open, mobile → closed
+      setSidebarOpen(!e.matches); // desktop -> open, mobile -> closed
     };
     handle(mq);
     mq.addEventListener("change", handle);

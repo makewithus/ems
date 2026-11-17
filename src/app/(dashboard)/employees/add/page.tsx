@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
-  ArrowLeft, Loader2, User, Briefcase, KeyRound, Check,
+  ArrowLeft, ArrowRight, Loader2, User, Briefcase, KeyRound, Check,
   Eye, EyeOff, Copy, CheckCheck, X, Lock,
 } from "lucide-react";
 import { EMPLOYMENT_TYPES } from "@/lib/utils";
@@ -470,11 +470,23 @@ export default function AddEmployeePage() {
 
           {/* Navigation */}
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 28, paddingTop: 20, borderTop: "1px solid var(--border)" }}>
-            <button type="button" className="btn btn-secondary" onClick={() => step > 1 ? setStep((s) => s - 1) : router.back()}>
-              {step === 1 ? "Cancel" : "← Back"}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              onClick={() => step > 1 ? setStep((s) => s - 1) : router.back()}
+            >
+              {step === 1 ? "Cancel" : <><ArrowLeft size={14} /> Back</>}
             </button>
             {step < 3 ? (
-              <button type="button" className="btn btn-primary" onClick={nextStep}>Next →</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                onClick={nextStep}
+              >
+                <span>Next</span> <ArrowRight size={14} />
+              </button>
             ) : (
               <button type="submit" className="btn btn-primary" disabled={saving} id="add-employee-submit">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : null}

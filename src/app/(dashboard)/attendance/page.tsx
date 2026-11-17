@@ -7,7 +7,7 @@ import {
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { useAttendanceStore } from "@/store/attendance.store";
-import { formatDate } from "@/lib/utils";
+import { formatDate, fmt24to12 } from "@/lib/utils";
 import { useDepartments } from "@/hooks/useDepartments";
 import {
   useAttendanceByDate,
@@ -28,13 +28,6 @@ const statusBadge: Record<string, { bg: string; color: string }> = {
   Holiday:    { bg: "var(--accent-blue-dim)",   color: "var(--accent-blue)" },
 };
 
-function fmt24to12(t: string): string {
-  if (!t) return "—";
-  const [h, m] = t.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
-}
 
 type AdminTab = "overview" | "manual";
 

@@ -4,7 +4,7 @@ import {
   ChevronLeft, ChevronRight, Users, CheckCircle2,
   XCircle, Clock, AlertCircle, X, Save, Loader2,
   CalendarDays, PenLine, Search,
-  UserCheck, ListChecks, Pencil, CalendarClock, Lock, Check,
+  UserCheck, ListChecks, Pencil, CalendarClock, Lock, Check, ArrowRight,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot, doc, getDoc } from "firebase/firestore";
@@ -300,8 +300,8 @@ function InteractiveCalendar({
   };
 
   /**
-   * Single tap  → Present (green) — instant color, background save
-   * Double tap  → Absent  (red)   — instant color, background save
+   * Single tap: Present (green) — instant color, background save
+   * Double tap: Absent  (red)   — instant color, background save
    * 220ms window between the two taps.
    */
   const handleTap = (dateStr: string) => {
@@ -354,17 +354,17 @@ function InteractiveCalendar({
       <div style={{ display:"flex", gap:16, alignItems:"center", padding:"10px 16px", marginBottom:14, borderRadius:"var(--radius-sm)", background:"rgba(255,255,255,0.03)", border:"1px solid var(--border)", fontSize:11, color:"var(--text-muted)", flexWrap:"wrap" }}>
         <span style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ width:10, height:10, borderRadius:3, background:"rgba(34,197,94,0.28)", border:"1px solid rgba(34,197,94,0.6)", flexShrink:0 }} />
-          <strong style={{ color:"var(--text-secondary)" }}>Click</strong> → Present
+          <strong style={{ color:"var(--text-secondary)" }}>Click</strong> <ArrowRight size={10} style={{ opacity: 0.6 }} /> Present
         </span>
         <span style={{ opacity:0.3 }}>│</span>
         <span style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ width:10, height:10, borderRadius:3, background:"rgba(239,68,68,0.28)", border:"1px solid rgba(239,68,68,0.6)", flexShrink:0 }} />
-          <strong style={{ color:"var(--text-secondary)" }}>Double-click</strong> → Absent
+          <strong style={{ color:"var(--text-secondary)" }}>Double-click</strong> <ArrowRight size={10} style={{ opacity: 0.6 }} /> Absent
         </span>
         <span style={{ opacity:0.3 }}>│</span>
         <span style={{ display:"flex", alignItems:"center", gap:6 }}>
           <Pencil size={10} />
-          <strong style={{ color:"var(--text-secondary)" }}>Pencil icon</strong> → Edit details
+          <strong style={{ color:"var(--text-secondary)" }}>Pencil icon</strong> <ArrowRight size={10} style={{ opacity: 0.6 }} /> Edit details
         </span>
       </div>
 

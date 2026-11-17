@@ -114,7 +114,7 @@ const KPIS: KPI[] = [
     sub: "Avg. across all members",
     icon: Activity,
     color: "#3B82F6",
-    trend: "↑ 6% vs last month",
+    trend: "+6% vs last month",
   },
   {
     label: "Avg. Delivery Time",
@@ -122,7 +122,7 @@ const KPIS: KPI[] = [
     sub: "Min 2 days · Max 5 days per cycle",
     icon: Clock,
     color: "#A855F7",
-    trend: "↓ Fast turnaround",
+    trend: "Fast turnaround",
   },
   {
     label: "Products in Pipeline",
@@ -138,7 +138,7 @@ const KPIS: KPI[] = [
     sub: "Based on project feedback",
     icon: ShieldCheck,
     color: "#06B6D4",
-    trend: "↑ 0.3 improvement",
+    trend: "+0.3 improvement",
   },
 ];
 

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Check, AlertCircle, X, Sparkles } from "lucide-react";
+import { Check, AlertCircle, X, Sparkles, ExternalLink, RefreshCw, ChevronDown, ArrowRight } from "lucide-react";
 
 interface Issue {
   number:   number;
@@ -273,12 +273,12 @@ localStorage.setItem("ems_doc_id", id);
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>Doc Connected</p>
-                <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>Open in Google Docs ↗</a>
+                <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>Open in Google Docs</a>
               </div>
               <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)", display: "inline-flex", alignItems: "center", gap: 4 }}><Check size={11} strokeWidth={2.5} /> Active</span>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => fetchIssues(docId)} style={outlineBtn}>↺ Refresh</button>
+              <button onClick={() => fetchIssues(docId)} style={outlineBtn}>Refresh</button>
               <button onClick={() => {
                 setDocConnected(false); setDocId(""); setDocUrl(""); setUrlInput(""); setIssues([]);
                 localStorage.removeItem("ems_doc_id"); localStorage.removeItem("ems_doc_url");
@@ -364,23 +364,27 @@ localStorage.setItem("ems_doc_id", id);
             </p>
             <span style={{ background: "#f0fdf4", color: "var(--accent-green)", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(34, 197, 94, 0.2)", display: "inline-flex", alignItems: "center", gap: 4 }}><Check size={11} strokeWidth={2.5} /> Active</span>
           </div>
-          <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4" }}>
-            Open in Google Docs ↗
+          <a href={docUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#4285f4", display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <span>Open in Google Docs</span>
+            <ExternalLink size={11} />
           </a>
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 8, position: "relative" }}>
-        <button onClick={() => fetchIssues(docId)} style={outlineBtn}>↺ Refresh</button>
+        <button onClick={() => fetchIssues(docId)} style={{ ...outlineBtn, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <RefreshCw size={12} /> Refresh
+        </button>
         
         {/* Switch Project dropdown */}
         {savedDocs.length > 1 && (
           <div style={{ position: "relative" }}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              style={{ ...outlineBtn, background: showDropdown ? "rgba(99, 102, 241, 0.1)" : undefined, color: showDropdown ? "#818cf8" : undefined }}
+              style={{ ...outlineBtn, background: showDropdown ? "rgba(99, 102, 241, 0.1)" : undefined, color: showDropdown ? "#818cf8" : undefined, display: "inline-flex", alignItems: "center", gap: 5 }}
             >
-              Switch Project ▾
+              <span>Switch Project</span>
+              <ChevronDown size={12} />
             </button>
             {showDropdown && (
               <div style={{
@@ -594,7 +598,7 @@ localStorage.setItem("ems_doc_id", id);
                   disabled={loading || !text.trim()}
                   style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 8, border: "none", background: loading || !text.trim() ? "var(--border)" : "var(--brand-red)", color: "#fff", cursor: loading || !text.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}
                 >
-                  {loading ? <span style={{ width: 10, height: 10, border: "1.5px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite", display: "inline-block" }}/> : "→"}
+                  {loading ? <span style={{ width: 10, height: 10, border: "1.5px solid rgba(255,255,255,0.4)", borderTopColor: "#fff", borderRadius: "50%", animation: "spin 0.7s linear infinite", display: "inline-block" }}/> : <ArrowRight size={14} />}
                 </button>
               </div>
               {isListening && (

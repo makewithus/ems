@@ -8,9 +8,9 @@ import { useAttendanceStore } from "@/store/attendance.store";
 import { useEmployeeAttendance, recordClockIn, recordClockOut } from "@/hooks/useAttendance";
 import { db } from "@/lib/firebase";
 import {
-  collection, query, where, onSnapshot, orderBy, limit,
+  collection, query, where, onSnapshot, orderBy, limit, doc,
 } from "firebase/firestore";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, fmt24to12, parseTimeToMinutes } from "@/lib/utils";
 
 const tooltipStyle = {
   backgroundColor: "var(--bg-tertiary)",
@@ -29,13 +29,47 @@ const priorityColor: Record<string, string> = {
 
 const parseHours = (hStr: string | undefined): number => {
   if (!hStr || hStr === "—") return 0;
-  const match = hStr.match(/(\d+)h(?:\s*(\d+)m)?/);
+  const match = hStr.match(/(\d+(?:\.\d+)?)h?(?:\s*(\d+)m)?/i);
   if (match) {
-    const hrs = parseInt(match[1], 10);
+    const hrs = parseFloat(match[1]);
     const mins = match[2] ? parseInt(match[2], 10) : 0;
-    return hrs + mins / 60;
+    const total = hrs + mins / 60;
+    return isNaN(total) ? 0 : total;
+  }
+  const directNum = parseFloat(hStr);
+  return isNaN(directNum) ? 0 : directNum;
+};
+
+const getRecordHours = (rec: { hoursWorked?: string; clockIn?: string; clockOut?: string } | null | undefined): number => {
+  if (!rec) return 0;
+  if (rec.hoursWorked && rec.hoursWorked !== "—" && !rec.hoursWorked.includes("NaN")) {
+    const parsed = parseHours(rec.hoursWorked);
+    if (parsed > 0) return parsed;
+  }
+  if (rec.clockIn && rec.clockOut) {
+    const inM = parseTimeToMinutes(rec.clockIn);
+    const outM = parseTimeToMinutes(rec.clockOut);
+    if (inM !== null && outM !== null && outM > inM) {
+      return parseFloat(((outM - inM) / 60).toFixed(1));
+    }
   }
   return 0;
+};
+
+const getRecordHoursFormatted = (rec: { hoursWorked?: string; clockIn?: string; clockOut?: string } | null | undefined): string => {
+  if (!rec) return "—";
+  if (rec.hoursWorked && rec.hoursWorked !== "—" && !rec.hoursWorked.includes("NaN")) {
+    return rec.hoursWorked;
+  }
+  if (rec.clockIn && rec.clockOut) {
+    const inM = parseTimeToMinutes(rec.clockIn);
+    const outM = parseTimeToMinutes(rec.clockOut);
+    if (inM !== null && outM !== null && outM > inM) {
+      const diff = outM - inM;
+      return `${Math.floor(diff / 60)}h ${diff % 60}m`;
+    }
+  }
+  return "—";
 };
 
 const MONTHS = [
@@ -85,17 +119,22 @@ export default function EmployeeDashboard() {
 
   // Fetch salary date from employee record
   useEffect(() => {
-    if (!employeeId) return;
-    // Find employee doc by employeeId field
-    const empQuery = query(collection(db, "employees"), where("employeeId", "==", employeeId), limit(1));
-    const unsub = onSnapshot(empQuery, (snap) => {
-      if (!snap.empty) {
-        setSalaryDate(snap.docs[0].data().salaryDate ?? "");
-        setJoiningDate(snap.docs[0].data().joiningDate ?? "");
-      }
-    }, () => {});
+    const docId = user?.uid || employeeId;
+    if (!docId) return;
+    const empRef = doc(db, "employees", docId);
+    const unsub = onSnapshot(
+      empRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          setSalaryDate(data.salaryDate !== undefined && data.salaryDate !== null ? String(data.salaryDate) : "");
+          setJoiningDate(data.joiningDate ?? "");
+        }
+      },
+      (err) => console.error("Employee profile fetch error:", err)
+    );
     return () => unsub();
-  }, [employeeId]);
+  }, [user?.uid, employeeId]);
 
   // Compute adjusted payment date
   const paymentInfo = useMemo(() => {
@@ -125,12 +164,19 @@ export default function EmployeeDashboard() {
     }
 
     try {
-      const base = new Date(salaryDate);
-      if (isNaN(base.getTime())) return null;
-      const payDate = new Date(cYear, cMonth, base.getDate());
+      let baseDay = 10;
+      if (!isNaN(Number(salaryDate))) {
+        baseDay = Number(salaryDate);
+      } else {
+        const base = new Date(salaryDate);
+        if (!isNaN(base.getTime())) {
+          baseDay = base.getDate();
+        }
+      }
+      const payDate = new Date(cYear, cMonth, baseDay);
       payDate.setDate(payDate.getDate() + absentCount);
       return {
-        baseDayOfMonth: base.getDate(),
+        baseDayOfMonth: baseDay,
         absentCount,
         adjustedDate: payDate,
       };
@@ -216,16 +262,23 @@ export default function EmployeeDashboard() {
     if (!employeeId) return;
     const q = query(
       collection(db, "payroll"),
-      where("employeeId", "==", employeeId),
-      orderBy("createdAt", "desc"),
-      limit(1)
+      where("employeeId", "==", employeeId)
     );
-    const unsub = onSnapshot(q, (snap) => {
-      if (!snap.empty) {
-        const d = snap.docs[0].data();
-        setLatestPayslip({ net: d.net ?? 0, month: d.month ?? "", status: d.status ?? "Generated" });
-      }
-    }, () => {});
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        if (!snap.empty) {
+          const sorted = [...snap.docs].sort((a, b) => {
+            const aTime = a.data().createdAt?.toMillis?.() ?? (a.data().createdAt?.seconds ? a.data().createdAt.seconds * 1000 : 0);
+            const bTime = b.data().createdAt?.toMillis?.() ?? (b.data().createdAt?.seconds ? b.data().createdAt.seconds * 1000 : 0);
+            return bTime - aTime;
+          });
+          const d = sorted[0].data();
+          setLatestPayslip({ net: d.net ?? 0, month: d.month ?? "", status: d.status ?? "Generated" });
+        }
+      },
+      (err) => console.error("Employee payslip fetch error:", err)
+    );
     return () => unsub();
   }, [employeeId]);
 
@@ -268,25 +321,21 @@ export default function EmployeeDashboard() {
       const rec = empRecords.find((r) => r.date === dateStr);
       let hours = 0;
       if (rec?.clockIn && rec?.clockOut) {
-        const [inH, inM] = rec.clockIn.split(":").map(Number);
-        const [outH, outM] = rec.clockOut.split(":").map(Number);
-        const diff = (outH * 60 + outM) - (inH * 60 + inM);
-        hours = Math.max(0, parseFloat((diff / 60).toFixed(1)));
+        const inMins = parseTimeToMinutes(rec.clockIn);
+        const outMins = parseTimeToMinutes(rec.clockOut);
+        if (inMins !== null && outMins !== null && outMins > inMins) {
+          const diff = outMins - inMins;
+          hours = Math.max(0, parseFloat((diff / 60).toFixed(1)));
+        }
+      } else if (rec?.hoursWorked) {
+        hours = parseHours(rec.hoursWorked);
       }
+      if (isNaN(hours)) hours = 0;
       result.unshift({ day: days[dow === 0 ? 6 : dow - 1] ?? `D${dayIdx}`, hours });
       dayIdx++;
     }
     return result;
   }, [empRecords]);
-
-  // Format 24h time to 12h
-  function fmt24to12(t: string): string {
-    if (!t) return "—";
-    const [h, m] = t.split(":").map(Number);
-    const period = h >= 12 ? "PM" : "AM";
-    const h12 = h % 12 || 12;
-    return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
-  }
 
   const handleAction = async () => {
     if (!hasClockedIn) {
@@ -360,9 +409,11 @@ export default function EmployeeDashboard() {
       label: "Payment Date",
       value: paymentInfo
         ? paymentInfo.adjustedDate.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-        : salaryDate
+        : salaryDate && !isNaN(new Date(salaryDate).getTime())
           ? new Date(salaryDate).getDate() + "th"
-          : "—",
+          : !isNaN(Number(salaryDate)) && Number(salaryDate) > 0
+            ? Number(salaryDate) + "th"
+            : "—",
       icon: CalendarClock,
       color: paymentInfo && paymentInfo.absentCount > 0 ? "var(--accent-red)" : "var(--accent-green)",
       sub: paymentInfo && paymentInfo.absentCount > 0
@@ -467,7 +518,7 @@ export default function EmployeeDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} axisLine={false} tickLine={false} width={24} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.02)" }} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.02)" }} formatter={(val: number | string | (number | string)[] | undefined) => [isNaN(Number(val)) ? "0h" : `${Number(val)}h`, "Hours Logged"]} />
                 <Area type="monotone" dataKey="hours" stroke="#3B82F6" fill="url(#activityGrad)" strokeWidth={2} activeDot={{ r: 4, fill: "#3B82F6" }} name="Hours Logged" />
               </AreaChart>
             </ResponsiveContainer>
@@ -554,8 +605,9 @@ export default function EmployeeDashboard() {
                   title = "Not joined yet";
                   statusLabel = "";
                 } else if (rec) {
-                  const hours = parseHours(rec.hoursWorked);
+                  const hours = getRecordHours(rec);
                   const status = rec.status;
+                  const displayHours = getRecordHoursFormatted(rec);
                   if (status === "Present" || status === "Late") {
                     if (hours >= 8) {
                       bg = "rgba(30, 158, 85, 0.18)";
@@ -567,13 +619,13 @@ export default function EmployeeDashboard() {
                       bg = "rgba(217, 140, 0, 0.10)";
                       color = "var(--accent-amber)";
                     }
-                    title = `${status} (${rec.hoursWorked})`;
+                    title = `${status} (${displayHours})`;
                     statusLabel = status;
                     statusDotColor = color;
                   } else if (status === "Half Day") {
                     bg = "rgba(217, 140, 0, 0.10)";
                     color = "var(--accent-amber)";
-                    title = `Half Day (${rec.hoursWorked})`;
+                    title = `Half Day (${displayHours})`;
                     statusLabel = "Half";
                     statusDotColor = color;
                   } else if (status === "Absent") {
@@ -710,28 +762,33 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Productivity metrics */}
-              {selectedRecord && (selectedRecord.status === "Present" || selectedRecord.status === "Late") ? (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
-                    <span>Productivity Score</span>
-                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
-                      {Math.min(100, Math.round((parseHours(selectedRecord.hoursWorked) / 8) * 100))}%
-                    </span>
+              {selectedRecord && (selectedRecord.status === "Present" || selectedRecord.status === "Late") ? (() => {
+                const hours = getRecordHours(selectedRecord);
+                const score = isNaN(hours) ? 0 : Math.min(100, Math.max(0, Math.round((hours / 8) * 100)));
+                const displayHours = getRecordHoursFormatted(selectedRecord);
+                return (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+                      <span>Productivity Score</span>
+                      <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>
+                        {score}%
+                      </span>
+                    </div>
+                    <div style={{ height: 4, background: "var(--border)", borderRadius: 2, marginBottom: 8, overflow: "hidden" }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${score}%`,
+                        background: hours >= 8 ? "var(--accent-green)" : (hours >= 5 ? "var(--accent-green)" : "var(--accent-amber)"),
+                        borderRadius: 2,
+                      }} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11, color: "var(--text-secondary)", marginTop: 8 }}>
+                      <div>Hours Worked: <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{displayHours}</span></div>
+                      <div>Clock Out: <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{selectedRecord.clockOut ? fmt24to12(selectedRecord.clockOut) : "Active Now"}</span></div>
+                    </div>
                   </div>
-                  <div style={{ height: 4, background: "var(--border)", borderRadius: 2, marginBottom: 8, overflow: "hidden" }}>
-                    <div style={{
-                      height: "100%",
-                      width: `${Math.min(100, Math.round((parseHours(selectedRecord.hoursWorked) / 8) * 100))}%`,
-                      background: parseHours(selectedRecord.hoursWorked) >= 8 ? "var(--accent-green)" : (parseHours(selectedRecord.hoursWorked) >= 5 ? "var(--accent-green)" : "var(--accent-amber)"),
-                      borderRadius: 2,
-                    }} />
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11, color: "var(--text-secondary)", marginTop: 8 }}>
-                    <div>Hours Worked: <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{selectedRecord.hoursWorked}</span></div>
-                    <div>Clock Out: <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{selectedRecord.clockOut ? fmt24to12(selectedRecord.clockOut) : "Active Now"}</span></div>
-                  </div>
-                </div>
-              ) : (
+                );
+              })() : (
                 <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic" }}>
                   {new Date(selectedCalendarDate).getDay() === 0 || new Date(selectedCalendarDate).getDay() === 6 
                     ? "Enjoy your weekend rest!" 

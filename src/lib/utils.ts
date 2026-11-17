@@ -21,12 +21,97 @@ export function timeAgo(date: Date | string) {
   return formatDistanceToNow(d, { addSuffix: true });
 }
 
+export function formatDeadlineHealth(deadline: string | Date | undefined | null) {
+  if (!deadline) return null;
+  const d = typeof deadline === "string" ? parseISO(deadline) : deadline;
+  if (isNaN(d.getTime())) return null;
+
+  const now = new Date();
+  const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const nDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.round((dDate.getTime() - nDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    const days = Math.abs(diffDays);
+    return {
+      status: "overdue" as const,
+      label: days === 1 ? "Overdue by 1 day" : `Overdue by ${days} days`,
+      days,
+    };
+  }
+  if (diffDays === 0) {
+    return {
+      status: "today" as const,
+      label: "Due Today",
+      days: 0,
+    };
+  }
+  return {
+    status: "upcoming" as const,
+    label: diffDays === 1 ? "Due Tomorrow" : `Due in ${diffDays} days`,
+    days: diffDays,
+  };
+}
+
 export function formatCurrency(amount: number, currency = "INR") {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency,
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+/**
+ * Safely parses any time string (12-hour e.g. "09:30 AM", "6:15 PM" or 24-hour e.g. "09:30", "18:15")
+ * into total minutes from midnight (0..1439). Returns null if invalid or NaN.
+ */
+export function parseTimeToMinutes(t: string | undefined | null): number | null {
+  if (!t || t === "—" || typeof t !== "string") return null;
+  const trimmed = t.trim();
+  if (trimmed.includes("NaN")) return null;
+
+  const match = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?\s*(am|pm)?$/i);
+  if (!match) return null;
+
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+
+  const mer = match[3]?.toUpperCase();
+  if (mer === "PM" && h < 12) {
+    h += 12;
+  } else if (mer === "AM" && h === 12) {
+    h = 0;
+  }
+
+  return h * 60 + m;
+}
+
+/**
+ * Formats any time string (24h or 12h) to standardized 12-hour format "hh:mm AM/PM".
+ * Returns "—" if empty, null, or invalid. Never outputs NaN.
+ */
+export function fmt24to12(t: string | undefined | null): string {
+  if (!t || t === "—" || typeof t !== "string") return "—";
+  if (t.includes("NaN")) return "—";
+
+  const match = t.trim().match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?\s*(am|pm)?$/i);
+  if (!match) return t;
+
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (isNaN(h) || isNaN(m)) return "—";
+
+  const mer = match[3]?.toUpperCase();
+  if (mer === "PM" && h < 12) {
+    h += 12;
+  } else if (mer === "AM" && h === 12) {
+    h = 0;
+  }
+
+  const period = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
 }
 
 export function formatNumber(num: number) {
@@ -122,9 +207,13 @@ export const LEAVE_STATUS = ["Pending", "Approved", "Rejected", "Cancelled"] as 
 export const TASK_STATUS = [
   "Pending",
   "In Progress",
+  "Under Review",
   "Review",
   "Completed",
+  "Cancelled",
 ] as const;
+
+export const TASK_PRIORITIES = ["Low", "Medium", "High", "Urgent", "Critical"] as const;
 
 export const NOTICE_PRIORITY = ["Low", "Normal", "Urgent", "Critical"] as const;
 

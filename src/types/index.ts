@@ -7,8 +7,8 @@ export type Gender = "Male" | "Female" | "Other" | "Prefer not to say";
 export type AttendanceStatus = "Present" | "Absent" | "Late" | "Half Day" | "Holiday" | "Weekend";
 export type LeaveStatus = "Pending" | "Approved" | "Rejected" | "Cancelled";
 export type LeaveType = "Casual" | "Medical" | "Emergency" | "Paid" | "Unpaid";
-export type TaskStatus = "Pending" | "In Progress" | "Review" | "Completed";
-export type TaskPriority = "Low" | "Medium" | "High" | "Critical";
+export type TaskStatus = "Pending" | "In Progress" | "Review" | "Under Review" | "Completed" | "Cancelled";
+export type TaskPriority = "Low" | "Medium" | "High" | "Urgent" | "Critical";
 export type NoticePriority = "Low" | "Normal" | "Urgent" | "Critical";
 export type DocumentVisibility = "Public" | "Department" | "Private";
 
@@ -23,6 +23,7 @@ export interface UserProfile {
   companyId: string;
   employeeId?: string;
   department?: string;
+  designation?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   isActive: boolean;
@@ -210,18 +211,67 @@ export interface Task {
   id: string;
   companyId: string;
   title: string;
+  desc?: string;
   description?: string;
+  startDate?: string;
   deadline?: string;
   priority: TaskPriority;
   status: TaskStatus;
+  assigneeId?: string;
+  assigneeName?: string;
   assignedTo: string;
-  assignedToName: string;
-  assignedBy: string;
-  attachments?: string[];
+  assignedToName?: string;
+  assignedBy?: string;
+  createdBy?: string;
+  createdByUid?: string;
+  estimatedHours?: number;
+  actualStartTime?: Timestamp | string;
+  submittedAt?: Timestamp | string;
+  submissionNotes?: string;
   proofURL?: string;
+  approvedAt?: Timestamp | string;
+  approvedBy?: string;
+  completedAt?: Timestamp | string;
+  reopenedAt?: Timestamp | string;
+  reopenedBy?: string;
+  lastReviewComment?: string;
+  adminOverride?: boolean;
+  overrideReason?: string;
+  attachments?: string[];
   progress: number;
   createdAt: Timestamp;
   updatedAt: Timestamp;
+}
+
+export interface TaskActivityLog {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  companyId?: string;
+  actorId: string;
+  actorName: string;
+  actorRole: Role | string;
+  action:
+    | "CREATED"
+    | "STATUS_CHANGE"
+    | "STARTED"
+    | "SUBMITTED"
+    | "APPROVED"
+    | "REJECTED"
+    | "MODIFICATION_REQUESTED"
+    | "ADMIN_OVERRIDE"
+    | "REOPENED"
+    | "REASSIGNED"
+    | "DEADLINE_CHANGED"
+    | "CANCELLED";
+  prevStatus?: string;
+  newStatus?: string;
+  comment?: string;
+  description?: string;
+  module?: string;
+  entityType?: string;
+  entityId?: string;
+  timestamp: string | any;
 }
 
 export interface Notification {

@@ -56,7 +56,7 @@ export async function createEmployeeAuth(
  * Updates an employee's auth credentials.
  *
  * Strategy:
- * - If only the password changed (same email): sign in with old creds → updatePassword
+ * - If only the password changed (same email): sign in with old creds -> updatePassword
  * - If the email changed: create a brand new auth account with the new email
  *   (Firebase client SDK does NOT allow updateEmail without email verification,
  *    so we bypass it entirely by creating a fresh account)

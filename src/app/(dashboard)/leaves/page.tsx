@@ -71,8 +71,7 @@ export default function LeavesPage() {
       } else {
         q = query(
           collection(db, "leaveRequests"),
-          where("employeeId", "==", profile?.employeeId ?? ""),
-          orderBy("createdAt", "desc")
+          where("employeeId", "==", profile?.employeeId ?? "")
         );
       }
       unsub = onSnapshot(
@@ -92,8 +91,16 @@ export default function LeavesPage() {
               status:     data.status      ?? "Pending",
               dept:       data.department  ?? "",
               employeeId: data.employeeId  ?? "",
-            };
+              rawCreatedAt: data.createdAt,
+            } as any;
           });
+          if (!isAdmin) {
+            rows.sort((a: any, b: any) => {
+              const aTime = a.rawCreatedAt?.toMillis?.() || (a.rawCreatedAt?.seconds ? a.rawCreatedAt.seconds * 1000 : 0);
+              const bTime = b.rawCreatedAt?.toMillis?.() || (b.rawCreatedAt?.seconds ? b.rawCreatedAt.seconds * 1000 : 0);
+              return bTime - aTime;
+            });
+          }
           setRequests(rows);
           setLoading(false);
         },

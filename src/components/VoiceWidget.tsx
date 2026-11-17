@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import { Check, AlertTriangle } from "lucide-react";
+import { Check, AlertTriangle, ArrowRight } from "lucide-react";
 
 interface VoiceWidgetProps {
   sidebarOpen?: boolean;
@@ -414,7 +414,7 @@ export default function VoiceWidget({ sidebarOpen = true }: VoiceWidgetProps) {
                       }}
                     />
                   ) : (
-                    "→"
+                    <ArrowRight size={14} />
                   )}
                 </button>
               </div>

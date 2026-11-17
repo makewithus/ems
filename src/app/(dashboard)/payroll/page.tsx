@@ -216,11 +216,10 @@ export default function PayrollPage() {
     if (isAdmin || !profile?.employeeId) return;
     const q = query(
       collection(db, "payroll"),
-      where("employeeId", "==", profile.employeeId),
-      orderBy("createdAt", "desc")
+      where("employeeId", "==", profile.employeeId)
     );
     const unsub = onSnapshot(q, (snap) => {
-      const rows: Payslip[] = snap.docs.map((d) => {
+      const rows: (Payslip & { rawCreatedAt?: any })[] = snap.docs.map((d) => {
         const data = d.data();
         return {
           id:         d.id,
@@ -234,7 +233,13 @@ export default function PayrollPage() {
           net:        data.net         ?? 0,
           status:     data.status      ?? "Generated",
           employeeId: data.employeeId  ?? "",
+          rawCreatedAt: data.createdAt,
         };
+      });
+      rows.sort((a, b) => {
+        const aTime = a.rawCreatedAt?.toMillis?.() || (a.rawCreatedAt?.seconds ? a.rawCreatedAt.seconds * 1000 : 0);
+        const bTime = b.rawCreatedAt?.toMillis?.() || (b.rawCreatedAt?.seconds ? b.rawCreatedAt.seconds * 1000 : 0);
+        return bTime - aTime;
       });
       setMyPayslips(rows);
       setEmpLoading(false);

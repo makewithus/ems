@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Users, Clock, CalendarDays, DollarSign,
   FolderOpen, Bell, ClipboardList, BarChart3, Settings,
-  ChevronLeft, MessageSquare,AlertCircle, Crown,
+  ChevronLeft, MessageSquare, AlertCircle, Crown, TrendingUp,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 // import VoiceWidget from "@/components/VoiceWidget";
@@ -16,12 +16,13 @@ const NAV = [
   { href: "/leaves",        label: "Leaves",        icon: CalendarDays,     roles: ["super_admin","hr_admin","employee"] },
   { href: "/payroll",       label: "Payroll",       icon: DollarSign,       roles: ["super_admin","hr_admin","employee"] },
   { href: "/documents",     label: "Documents",     icon: FolderOpen,       roles: ["super_admin","hr_admin"] },
-  { href: "/notices",       label: "Notices",       icon: MessageSquare,    roles: ["super_admin","hr_admin","employee"] },
-  { href: "/tasks",         label: "Tasks",         icon: ClipboardList,    roles: ["super_admin","hr_admin","employee"] },
-  { href: "/reports",       label: "Reports",       icon: BarChart3,        roles: ["super_admin","hr_admin"] },
+  { href: "/notices",           label: "Notices",          icon: MessageSquare,    roles: ["super_admin","hr_admin","employee"] },
+  { href: "/tasks",             label: "Tasks",            icon: ClipboardList,    roles: ["super_admin","hr_admin","employee"] },
+  { href: "/tasks/performance", label: "Team Performance", icon: TrendingUp,       roles: ["super_admin","hr_admin","employee"] },
+  { href: "/reports",           label: "Reports",          icon: BarChart3,        roles: ["super_admin","hr_admin"] },
   { href: "/notifications", label: "Notifications", icon: Bell,             roles: ["super_admin","hr_admin","employee"] },
   { href: "/settings",      label: "Settings",      icon: Settings,         roles: ["super_admin","hr_admin","employee"] },
-  { href: "/issues",        label: "Issues",        icon: AlertCircle,      roles: ["super_admin","hr_admin"] },  // ← add this
+  { href: "/issues",        label: "Issues",        icon: AlertCircle,      roles: ["super_admin","hr_admin"] },
 ];
 
 const EMPLOYER_SECTION = {
@@ -97,7 +98,11 @@ export default function Sidebar({ open, onToggle }: SidebarProps) {
       {/* Nav items */}
       <nav style={{ flex: 1, padding: "32px 16px", overflowY: "auto", overflowX: "hidden" }}>
         {filtered.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+          const active =
+            href === "/tasks"
+              ? pathname === "/tasks"
+              : pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+
           return (
             <Link
               key={href}

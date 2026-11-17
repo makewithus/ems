@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
+import { parseTimeToMinutes } from "@/lib/utils";
 import {
   collection, query, where, onSnapshot,
   doc, setDoc, getDoc, serverTimestamp,
@@ -188,10 +189,10 @@ export async function recordClockOut(
   // Compute hours worked
   let hoursWorked = "—";
   if (clockInTime) {
-    const [inH, inM] = clockInTime.split(":").map(Number);
-    const [outH, outM] = timeStr.split(":").map(Number);
-    const diff = (outH * 60 + outM) - (inH * 60 + inM);
-    if (diff > 0) {
+    const inMins = parseTimeToMinutes(clockInTime);
+    const outMins = parseTimeToMinutes(timeStr);
+    if (inMins !== null && outMins !== null && outMins > inMins) {
+      const diff = outMins - inMins;
       hoursWorked = `${Math.floor(diff / 60)}h ${diff % 60}m`;
     }
   }
