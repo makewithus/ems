@@ -262,7 +262,7 @@ function ActionMenu({
       danger: false, divider: false,
     },
     {
-      icon: KeyRound, label: "View Credentials",
+      icon: KeyRound, label: "Manage Password / Access",
       action: () => { setOpen(false); onCredentials(); },
       danger: false, divider: false,
     },
