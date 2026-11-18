@@ -26,28 +26,36 @@ export function toDateObj(val: any): Date | string {
 
 export function normalizeTaskStatus(status: string | undefined): TaskStatus {
   if (!status) return "Pending";
-  if (status === "Review") return "Under Review";
+  const s = status.toLowerCase();
+  if (s === "review" || s === "under review" || s === "under_review") return "Under Review";
+  if (s === "in progress" || s === "in_progress" || s === "inprogress") return "In Progress";
+  if (s === "completed") return "Completed";
+  if (s === "pending") return "Pending";
+  if (s === "cancelled" || s === "canceled") return "Cancelled";
   return status as TaskStatus;
 }
 
 export function isTaskCompleted(status: string | undefined): boolean {
-  return status === "Completed";
+  return status?.toLowerCase() === "completed";
 }
 
 export function isTaskUnderReview(status: string | undefined): boolean {
-  return status === "Under Review" || status === "Review";
+  const s = status?.toLowerCase();
+  return s === "under review" || s === "review" || s === "under_review";
 }
 
 export function isTaskInProgress(status: string | undefined): boolean {
-  return status === "In Progress";
+  const s = status?.toLowerCase();
+  return s === "in progress" || s === "in_progress" || s === "inprogress";
 }
 
 export function isTaskPending(status: string | undefined): boolean {
-  return status === "Pending";
+  return status?.toLowerCase() === "pending";
 }
 
 export function isTaskCancelled(status: string | undefined): boolean {
-  return status === "Cancelled";
+  const s = status?.toLowerCase();
+  return s === "cancelled" || s === "canceled";
 }
 
 /* ─── Deadlines & Time Tracking Helpers ──────────────────────── */
@@ -392,6 +400,8 @@ export async function transitionTaskStatus(options: TransitionOptions): Promise<
           addDoc(collection(db, "notifications"), {
             companyId,
             userId: adId,
+            senderUid: actor.uid,
+            createdBy: actor.uid,
             targetRole: "admin",
             title: targetStatus === "Under Review" ? "Task Submitted for Review" : "Task Status Updated",
             message: `${actor.displayName} ${
@@ -409,6 +419,8 @@ export async function transitionTaskStatus(options: TransitionOptions): Promise<
         await addDoc(collection(db, "notifications"), {
           companyId,
           userId: "admin",
+          senderUid: actor.uid,
+          createdBy: actor.uid,
           targetRole: "admin",
           title: targetStatus === "Under Review" ? "Task Submitted for Review" : "Task Status Updated",
           message: `${actor.displayName} ${
@@ -439,6 +451,8 @@ export async function transitionTaskStatus(options: TransitionOptions): Promise<
       await addDoc(collection(db, "notifications"), {
         companyId,
         userId: currentTask.assigneeId,
+        senderUid: actor.uid,
+        createdBy: actor.uid,
         title: notifTitle,
         message: notifMessage,
         type: "task",

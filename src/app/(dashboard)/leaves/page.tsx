@@ -54,7 +54,7 @@ type LeaveRow = {
 const TABS = ["All", "Pending", "Approved", "Rejected", "Cancelled"];
 
 export default function LeavesPage() {
-  const { role, profile } = useAuthStore();
+  const { user, role, profile } = useAuthStore();
   const isAdmin = role === "super_admin" || role === "hr_admin";
   const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState("All");
@@ -68,6 +68,10 @@ export default function LeavesPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     let unsub = () => {};
+    if (!isAdmin && !profile?.employeeId) {
+      setLoading(false);
+      return;
+    }
     const t = setTimeout(() => {
       let q;
       if (isAdmin) {
@@ -151,6 +155,8 @@ export default function LeavesPage() {
       await addDoc(collection(db, "notifications"), {
         companyId: profile?.companyId ?? "default",
         userId: "admin",
+        senderUid: user?.uid ?? profile?.uid,
+        createdBy: user?.uid ?? profile?.uid,
         targetRole: "admin",
         title: "New Leave Request Submitted",
         message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,

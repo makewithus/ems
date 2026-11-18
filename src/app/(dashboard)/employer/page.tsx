@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
+import { useAuthStore } from "@/store/auth.store";
 
 /* ─────────────────────────────────────────────
    Types
@@ -111,12 +112,12 @@ const KPIS: KPI[] = [
     trend: "Growing pipeline",
   },
   {
-    label: "Team Utilisation",
-    value: "94%",
-    sub: "Avg. across all members",
+    label: "Task Completion Rate",
+    value: "0%",
+    sub: "Live approved task delivery",
     icon: Activity,
     color: "#3B82F6",
-    trend: "+6% vs last month",
+    trend: "Live database sync",
   },
   {
     label: "Avg. Delivery Time",
@@ -379,10 +380,13 @@ function KPICard({ kpi }: { kpi: KPI }) {
    Page
 ───────────────────────────────────────────── */
 export default function EmployerPage() {
+  const { role } = useAuthStore();
+  const isAdmin = role === "super_admin" || role === "hr_admin";
   const [empCount, setEmpCount] = useState<number | null>(null);
   const [taskMetrics, setTaskMetrics] = useState<{ total: number; completed: number; progress: number } | null>(null);
 
   useEffect(() => {
+    if (!isAdmin) return;
     // Fetch live employee count
     getDocs(collection(db, "employees")).then((snap) => {
       setEmpCount(snap.size);
@@ -392,11 +396,11 @@ export default function EmployerPage() {
     getDocs(collection(db, "tasks")).then((snap) => {
       const all = snap.docs.map((d) => d.data());
       const total = all.length;
-      const completed = all.filter((t) => t.status === "completed").length;
+      const completed = all.filter((t) => t.status === "completed" || t.status === "Completed").length;
       const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
       setTaskMetrics({ total, completed, progress });
     }).catch(() => setTaskMetrics(null));
-  }, []);
+  }, [isAdmin]);
 
   const dynamicOrgStats = ORG_STATS.map((s) => {
     if (s.label === "Team Size" && empCount !== null) {
@@ -406,11 +410,11 @@ export default function EmployerPage() {
   });
 
   const dynamicKPIs = KPIS.map((k) => {
-    if (k.label === "Team Utilisation" && taskMetrics !== null) {
+    if (k.label === "Task Completion Rate" && taskMetrics !== null) {
       return {
         ...k,
         value: `${taskMetrics.progress}%`,
-        sub: `Live (${taskMetrics.completed}/${taskMetrics.total} tasks approved)`,
+        sub: `Live (${taskMetrics.completed}/${taskMetrics.total} tasks completed)`,
         trend: "Live database sync",
       };
     }

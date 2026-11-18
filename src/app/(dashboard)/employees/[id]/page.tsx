@@ -79,20 +79,17 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
     setSaving(true);
     try {
       let updatedEmail = form.email;
-      let passwordToSave = form.password || "";
-
       let finalUid = emp.uid;
 
       if (credentialsChanged) {
         // Update credentials in Auth
         const res = await updateEmployeeAuth(
           emp.email,
-          emp.password || "",
+          "",
           form.email,
           newPassword.trim() || undefined
         );
         updatedEmail = res.email;
-        passwordToSave = newPassword.trim() || (emp.password || "");
         if (res.uid) {
           finalUid = res.uid;
         }
@@ -115,7 +112,6 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
         salary:         Number(form.salary),
         salaryDate:     form.salaryDate,
         employeeId:     form.employeeId,
-        password:       passwordToSave,
         updatedAt:      serverTimestamp(),
       });
 
@@ -138,7 +134,7 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
       onSaved({
         ...form,
         email: updatedEmail,
-        password: passwordToSave
+        password: form.password || emp.password || "",
       });
       onClose();
     } catch (err: unknown) {
@@ -239,24 +235,17 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
             </div>
             <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                Already Set Password
+                Authentication Status
               </label>
               <div style={{ position: "relative" }}>
                 <input
-                  type={showCurrentPass ? "text" : "password"}
+                  type="password"
                   className="input-base"
                   readOnly
-                  value={emp.password || "Not set"}
-                  style={{ color: "var(--text-muted)", paddingRight: 40, cursor: "text" }}
+                  value="••••••••••••"
+                  title="Passwords are encrypted and securely managed by Firebase Authentication"
+                  style={{ color: "var(--text-muted)", paddingRight: 40, cursor: "not-allowed" }}
                 />
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "4px 6px" }}
-                  onClick={() => setShowCurrentPass(!showCurrentPass)}
-                >
-                  {showCurrentPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
               </div>
             </div>
             <div>
@@ -518,14 +507,33 @@ function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
 function EmployeeTasksTab({ emp }: { emp: Emp }) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { role } = useAuthStore();
+  const isAdmin = role === "super_admin" || role === "hr_admin";
 
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const snap = await getDocs(collection(db, "tasks"));
+        let snapDocs: any[] = [];
+        if (isAdmin) {
+          const snap = await getDocs(collection(db, "tasks"));
+          snapDocs = snap.docs;
+        } else {
+          const targetUid = emp.uid || "";
+          const q1 = targetUid ? query(collection(db, "tasks"), where("assigneeId", "==", targetUid)) : null;
+          const q2 = targetUid ? query(collection(db, "tasks"), where("assignedTo", "==", targetUid)) : null;
+          const [s1, s2] = await Promise.all([
+            q1 ? getDocs(q1) : Promise.resolve({ docs: [] }),
+            q2 ? getDocs(q2) : Promise.resolve({ docs: [] }),
+          ]);
+          const map = new Map();
+          s1.docs.forEach((d) => map.set(d.id, d));
+          s2.docs.forEach((d) => map.set(d.id, d));
+          snapDocs = Array.from(map.values());
+        }
+
         const fullName = `${emp.firstName} ${emp.lastName}`.toLowerCase();
-        const rows = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
+        const rows = snapDocs
+          .map((d: any) => ({ id: d.id, ...d.data() }))
           .filter((t: any) => {
             return (
               t.assigneeId === emp.uid ||
@@ -543,7 +551,7 @@ function EmployeeTasksTab({ emp }: { emp: Emp }) {
       }
     };
     fetchTasks();
-  }, [emp]);
+  }, [emp, isAdmin]);
 
   if (loading) {
     return <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}><Loader2 size={18} className="animate-spin" /> Loading tasks…</div>;
@@ -600,9 +608,14 @@ function EmployeeLeavesTab({ employeeId, uid }: { employeeId: string; uid?: stri
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!employeeId) {
+      setLoading(false);
+      return;
+    }
     const fetchLeaves = async () => {
       try {
-        const snap = await getDocs(collection(db, "leaveRequests"));
+        const q = query(collection(db, "leaveRequests"), where("employeeId", "==", employeeId));
+        const snap = await getDocs(q);
         const rows = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((l: any) => l.employeeId === employeeId || (uid && l.userId === uid));
@@ -730,11 +743,20 @@ function EmployeePayrollTab({ employeeId }: { employeeId: string }) {
 function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const { role } = useAuthStore();
+  const isAdmin = role === "super_admin" || role === "hr_admin";
 
   useEffect(() => {
+    if (!employeeId) {
+      setLoading(false);
+      return;
+    }
     const fetchDocs = async () => {
       try {
-        const snap = await getDocs(collection(db, "documents"));
+        const q = isAdmin
+          ? collection(db, "documents")
+          : query(collection(db, "documents"), where("employeeId", "==", employeeId));
+        const snap = await getDocs(q);
         const rows = snap.docs
           .map((d) => ({ id: d.id, ...d.data() }))
           .filter((d: any) => d.employeeId === employeeId || d.folderId === "3");
@@ -746,7 +768,7 @@ function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
       }
     };
     fetchDocs();
-  }, [employeeId]);
+  }, [employeeId, isAdmin]);
 
   if (loading) {
     return <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}><Loader2 size={18} className="animate-spin" /> Loading documents…</div>;

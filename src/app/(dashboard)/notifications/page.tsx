@@ -27,7 +27,8 @@ type Notif = {
 };
 
 export default function NotificationsPage() {
-  const { user } = useAuthStore();
+  const { user, role } = useAuthStore();
+  const isAdmin = role === "super_admin" || role === "hr_admin";
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all"|"unread">("all");
@@ -38,10 +39,9 @@ export default function NotificationsPage() {
       return;
     }
 
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", user.uid)
-    );
+    const q = isAdmin
+      ? query(collection(db, "notifications"))
+      : query(collection(db, "notifications"), where("userId", "==", user.uid));
 
     const unsub = onSnapshot(
       q,
@@ -68,7 +68,7 @@ export default function NotificationsPage() {
     );
 
     return () => unsub();
-  }, [user?.uid]);
+  }, [user?.uid, isAdmin]);
 
   const markRead = async (id: string) => {
     try {

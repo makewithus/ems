@@ -2,49 +2,194 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // This security rules file assumes the following data structures:
+    //
+    // Collection: /users/{userId}
+    //   - uid: string (required) - Firebase Auth UID
+    //   - email: string (required) - User email address
+    //   - role: string (required: 'super_admin' | 'hr_admin' | 'admin' | 'employee') - Privilege role
+    //   - employeeId: string (optional) - Link to employee document / business employee code
+    //   - displayName: string (optional) - User's display name
+    //   - companyId: string (optional) - Associated company identifier
+    //   - department: string (optional) - Assigned department name
+    //   - designation: string (optional) - Job title / position
+    //   - createdAt: timestamp (optional) - User document creation time
+    //   - updatedAt: timestamp (optional) - Last profile update time
+    //
+    // Collection: /companies/{companyId}
+    //   - name: string (required) - Company name
+    //   - code: string (optional) - Organization short code
+    //
+    // Collection: /employees/{employeeId}
+    //   - uid: string (optional) - Linked Firebase Auth UID
+    //   - employeeId: string (required, immutable for employee) - Employee business ID
+    //   - name / firstName / lastName: string (required) - Employee identity
+    //   - email: string (required) - Employee contact email
+    //   - department: string (immutable for employee) - Department assignment
+    //   - designation: string (immutable for employee) - Designation title
+    //   - salary: number / map (immutable for employee) - Compensation details
+    //   - status: string (immutable for employee: 'Active' | 'Inactive' | 'On Leave' | 'Terminated')
+    //   - employmentType: string (immutable for employee: 'Full-time' | 'Part-time' | 'Contract')
+    //
+    // Collection: /departments/{deptId}
+    //   - name: string (required) - Department title
+    //   - head: string (optional) - Department head identifier
+    //
+    // Collection: /attendance/{attId}
+    //   - employeeId: string (required) - Employee business ID
+    //   - date: string (required) - Attendance date (YYYY-MM-DD)
+    //   - status: string (required: 'Present' | 'Absent' | 'Late' | 'Half-Day' | 'On Leave')
+    //   - checkIn: timestamp / string (optional) - Clock-in timestamp
+    //   - checkOut: timestamp / string (optional) - Clock-out timestamp
+    //
+    // Collection: /leaveRequests/{leaveId}
+    //   - employeeId: string (required, immutable) - Submitter employee business ID
+    //   - employeeName: string (optional) - Submitter display name
+    //   - leaveType: string (required: 'Sick' | 'Casual' | 'Annual' | 'Unpaid')
+    //   - startDate: string (required) - Leave start date
+    //   - endDate: string (required) - Leave end date
+    //   - days: number (required) - Requested leave day count
+    //   - reason: string (optional) - Submitter justification
+    //   - status: string (required: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled')
+    //   - reviewedBy: string (optional, admin only) - Reviewer name or UID
+    //   - reviewedAt: timestamp (optional, admin only) - Admin review timestamp
+    //   - cancelledAt: timestamp (optional, employee cancel) - Cancellation timestamp
+    //   - createdAt: timestamp (required) - Submission timestamp
+    //   - updatedAt: timestamp (required) - Last update timestamp
+    //
+    // Collection: /leaveBalances/{balanceId}
+    //   - employeeId: string (required) - Linked employee business ID
+    //   - sick / casual / annual: number (optional) - Remaining leave balance
+    //
+    // Collection: /payroll/{payId}
+    //   - employeeId: string (required) - Associated employee business ID
+    //   - month: string / number (required) - Pay period month
+    //   - year: number (required) - Pay period year
+    //   - basicSalary: number (required) - Base compensation
+    //   - netSalary: number (required) - Total net payout
+    //
+    // Collection: /payslips/{slipId}
+    //   - employeeId: string (required) - Associated employee business ID
+    //   - month: string / number (required) - Pay period month
+    //   - year: number (required) - Pay period year
+    //   - url / dataUrl: string (optional) - Payslip document link or base64 data
+    //
+    // Collection: /documents/{docId}
+    //   - title: string (required) - Document title
+    //   - employeeId: string (optional) - Owner employee business ID
+    //   - visibility: string (required: 'Public' | 'Private') - Access scope
+    //   - fileUrl / dataUrl: string (optional) - Document binary location
+    //
+    // Collection: /folders/{folderId}
+    //   - name: string (required) - Folder title
+    //
+    // Collection: /tasks/{taskId}
+    //   - title: string (required) - Task title
+    //   - description / desc: string (optional) - Task details
+    //   - assigneeId / assignedTo: string (optional) - Assigned employee UID
+    //   - createdByUid: string (optional) - Creator employee/admin UID
+    //   - status: string (required: 'Pending' | 'In Progress' | 'Under Review' | 'Completed' | 'Cancelled')
+    //   - priority: string (optional: 'Low' | 'Medium' | 'High' | 'Urgent')
+    //   - deadline: string / timestamp (optional) - Target completion date
+    //   - submissionNotes: string (optional) - Notes provided on review submission
+    //   - proofURL: string (optional) - Review verification link
+    //
+    // Collection: /notices/{noticeId}
+    //   - title: string (required) - Notice header
+    //   - description: string (required) - Notice content
+    //   - readBy: list (optional) - List of employee UIDs who acknowledged notice
+    //
+    // Collection: /notifications/{notifId}
+    //   - userId / recipientId: string (optional) - Recipient UID
+    //   - senderUid / createdBy: string (optional) - Sender UID
+    //   - title: string (required) - Notification title
+    //   - message: string (required) - Notification body
+    //   - isRead / read: bool (optional) - Read status flag
+    //   - readAt: timestamp (optional) - Acknowledgment timestamp
+    //
+    // Collection: /settings/{settingId}
+    //   - System-wide configuration records
+    //
+    // Collection: /auditLogs/{logId}
+    //   - actorId: string (optional) - Event actor UID
+    //   - action: string (required) - Action identifier
+    //   - timestamp: timestamp (required) - Event occurrence timestamp
+    //
+    // Collection: /issues/{issueId}
+    //   - title: string (required) - Issue description / subject
+    //   - status: string (optional) - Issue tracking status
+    //
+    // Collection: /invoices/{invoiceId}
+    //   - invoiceNumber: string (required) - Invoice reference
+    //   - amount: number (required) - Invoice total
+    //
+    // ===============================================================
+
     // ── Helper: is user authenticated? ──────────────────────────────────
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // ── Helper: safe role check (returns null if profile missing) ────────
+    // ── Helper: safe role check (returns null if profile or role is missing) ──
     function userRole() {
       return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', null)
         : null;
     }
 
-    // ── Helper: get current user's employeeId from their profile ─────────
+    // ── Helper: get current user's employeeId from their profile safely ───────
     function currentEmployeeId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('employeeId', null)
+        : null;
     }
 
-    // ── Role predicates ──────────────────────────────────────────────────
+    // ── Role predicates (case-insensitive admin checks) ──────────────────
     function isSuperAdmin() {
-      return isSignedIn() && userRole() == 'super_admin';
+      return isSignedIn() && (
+        userRole() == 'super_admin' ||
+        userRole() == 'SUPER_ADMIN' ||
+        userRole() == 'admin' ||
+        userRole() == 'ADMIN'
+      );
     }
 
     function isHRAdmin() {
-      return isSignedIn() && (userRole() == 'hr_admin' || userRole() == 'super_admin');
+      return isSignedIn() && (
+        userRole() == 'hr_admin' ||
+        userRole() == 'HR_ADMIN' ||
+        userRole() == 'super_admin' ||
+        userRole() == 'SUPER_ADMIN' ||
+        userRole() == 'admin' ||
+        userRole() == 'ADMIN'
+      );
     }
 
     // Any signed-in user whose profile has the given employeeId field
     function isOwnerById(employeeId) {
       return isSignedIn()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.employeeId == employeeId;
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('employeeId', null) == employeeId;
     }
 
     // ── /users ───────────────────────────────────────────────────────────
     // Allow all signed-in users to read directory/user profiles (needed for
     // team performance, assigning tasks, and employee actions notifying admins).
-    // Employees cannot alter their role.
+    // Employees cannot alter their role or escalate privileges on creation.
     match /users/{userId} {
       allow read: if isSignedIn();
       allow write, delete: if isSuperAdmin();
-      allow create: if isHRAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow create: if isHRAdmin()
+        || (isSignedIn()
+            && request.auth.uid == userId
+            && request.resource.data.get('role', 'employee') == 'employee');
       allow update: if isHRAdmin()
-        || (isSignedIn() && request.auth.uid == userId
+        || (isSignedIn()
+            && request.auth.uid == userId
             && request.resource.data.get('role', null) == resource.data.get('role', null));
     }
 
@@ -55,9 +200,8 @@ service cloud.firestore {
     }
 
     // ── /employees ───────────────────────────────────────────────────────
-    // SECURITY FIX [C2]: Removed `|| isSignedIn()` from create rule.
-    // Only HR admins can create employee records.
-    // SECURITY FIX [M5]: Employee self-update restricted to safe fields only.
+    // SECURITY FIX: Only HR admins can create employee records.
+    // Employee self-update restricted to safe fields only.
     // Employees cannot modify their own salary, department, designation,
     // status, employeeId, or employmentType.
     match /employees/{employeeId} {
@@ -82,9 +226,7 @@ service cloud.firestore {
     }
 
     // ── /attendance ──────────────────────────────────────────────────────
-    // SECURITY FIX [C3]: Restricted create/update so employees can only
-    // create/update their OWN attendance records. Previously any signed-in
-    // user could mark anyone present/absent.
+    // Employees can only create/update/read their OWN attendance records.
     match /attendance/{attId} {
       allow read:
         if isHRAdmin()
@@ -104,16 +246,16 @@ service cloud.firestore {
     }
 
     // ── /leaveRequests ───────────────────────────────────────────────────
-    // SECURITY FIX: Restricted create so employees can only submit leave
-    // requests for themselves (matching their own employeeId).
+    // Employees can only submit leave requests for themselves (matching their own employeeId).
+    // Employees cannot approve or reject their own leaves (restricted strictly to Pending or Cancelled).
+    // Employee cannot modify employeeId on update.
+    // No unauthenticated data leak or resource == null bypass.
     match /leaveRequests/{leaveId} {
       allow read:
         if isHRAdmin()
-        || (isSignedIn() && (
-              resource == null
-              || !exists(/databases/$(database)/documents/users/$(request.auth.uid))
-              || resource.data.employeeId == currentEmployeeId()
-           ));
+        || (isSignedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && resource.data.employeeId == currentEmployeeId());
       allow create:
         if isHRAdmin()
         || (isSignedIn()
@@ -124,7 +266,9 @@ service cloud.firestore {
         || (isSignedIn()
             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
             && resource.data.employeeId == currentEmployeeId()
-            && resource.data.status == 'Pending');
+            && request.resource.data.employeeId == resource.data.employeeId
+            && resource.data.status == 'Pending'
+            && request.resource.data.status in ['Pending', 'Cancelled']);
     }
 
     // ── /leaveBalances ───────────────────────────────────────────────────
@@ -138,8 +282,7 @@ service cloud.firestore {
     }
 
     // ── /payroll ─────────────────────────────────────────────────────────
-    // SECURITY FIX: Allow employees to read their OWN payroll records
-    // (needed for employee payslip view). Write remains admin-only.
+    // Employees can read their OWN payroll records. Write is admin-only.
     match /payroll/{payId} {
       allow read:
         if isHRAdmin()
@@ -178,6 +321,8 @@ service cloud.firestore {
     }
 
     // ── /tasks ───────────────────────────────────────────────────────────
+    // Non-admin employees can update assigned or created tasks (e.g. In Progress, Under Review),
+    // but CANNOT transition task status to 'Completed' without admin approval.
     match /tasks/{taskId} {
       // Employee can read if EITHER assignedTo OR assigneeId matches their UID, or createdByUid
       allow read:
@@ -194,7 +339,7 @@ service cloud.firestore {
               resource.data.assignedTo == request.auth.uid
               || resource.data.assigneeId == request.auth.uid
               || resource.data.createdByUid == request.auth.uid
-           ));
+           ) && request.resource.data.get('status', '') != 'Completed');
       allow delete: if isHRAdmin();
     }
 
@@ -204,18 +349,45 @@ service cloud.firestore {
     match /notices/{noticeId} {
       allow read:  if isSignedIn();
       allow create, delete: if isHRAdmin();
-      allow update: if isHRAdmin() || (isSignedIn() && request.resource.data.title == resource.data.title && request.resource.data.description == resource.data.description);
+      allow update: if isHRAdmin()
+        || (isSignedIn()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
     }
 
     // ── /notifications ───────────────────────────────────────────────────
+    // SECURITY FIX: Restricted to authenticated users with strict least-privilege.
+    // Employees can only read notifications directed to their own UID.
+    // Employees can only create notifications if senderUid/createdBy matches their auth UID.
+    // Employees can only update isRead on their own notifications.
     match /notifications/{notifId} {
-      allow read, write: if true;
+      allow read:
+        if isHRAdmin()
+        || (isSignedIn() && (
+              resource.data.userId == request.auth.uid
+              || resource.data.recipientId == request.auth.uid
+           ));
+      allow create:
+        if isHRAdmin()
+        || (isSignedIn() && (
+              request.resource.data.senderUid == request.auth.uid
+              || request.resource.data.createdBy == request.auth.uid
+           ));
+      allow update:
+        if isHRAdmin()
+        || (isSignedIn()
+            && resource.data.userId == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'read', 'readAt']));
+      allow delete:
+        if isHRAdmin()
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     // ── /settings ────────────────────────────────────────────────────────
+    // SECURITY FIX: Restricted to authenticated read, and HR Admin write ONLY.
+    // Employees cannot alter company settings, categories, or corporate details.
     match /settings/{settingId} {
-      allow read:  if true;
-      allow write: if isHRAdmin() || isSignedIn();
+      allow read:  if isSignedIn();
+      allow write: if isHRAdmin();
     }
 
     // ── /auditLogs ────────────────────────────────────────────────────
@@ -225,14 +397,16 @@ service cloud.firestore {
     }
 
     // ── /issues ───────────────────────────────────────────────────────
+    // Authenticated users can read issues; only HR Admins can write.
     match /issues/{issueId} {
-      allow read, write: if isSignedIn();
+      allow read:  if isSignedIn();
+      allow write: if isHRAdmin();
     }
 
     // ── /invoices ─────────────────────────────────────────────────────
+    // Confidential billing records restricted exclusively to HR Admins.
     match /invoices/{invoiceId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if isHRAdmin();
     }
   }
 }
-

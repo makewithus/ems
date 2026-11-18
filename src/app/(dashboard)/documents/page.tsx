@@ -49,7 +49,35 @@ type DocFile = {
   pinned: boolean;
   favorite: boolean;
   folderId: string;
+  url?: string;
+  dataUrl?: string;
+  fileData?: string;
 };
+
+function triggerDocumentDownload(file: DocFile) {
+  const downloadUrl = file.dataUrl || file.fileData || file.url;
+  if (downloadUrl) {
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success(`Downloaded "${file.name}"`);
+    return;
+  }
+  const content = `%PDF-1.4\n1 0 obj\n<< /Title (${file.name}) /Producer (MakeWithUs Document Engine) >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF`;
+  const blob = new Blob([content], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file.name.endsWith(".pdf") ? file.name : `${file.name}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast.success(`Downloaded "${file.name}"`);
+}
 
 /* ─── Confirm Delete Dialog ─── */
 function ConfirmDialog({
@@ -283,7 +311,7 @@ function ActionMenu({
       label: "Download",
       action: () => {
         setOpen(false);
-        toast.success(`Document "${file.name}" downloaded successfully!`);
+        triggerDocumentDownload(file);
       },
       danger: false,
     },
@@ -373,6 +401,10 @@ export default function DocumentsPage() {
 
   /* ─── Fetch Documents from Firestore (no auto-seeding) ─── */
   useEffect(() => {
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
     const q = query(collection(db, "documents"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(
       q,
@@ -830,7 +862,7 @@ export default function DocumentsPage() {
             </div>
             
             <div style={{ padding: "24px 32px", borderTop: "1px solid var(--border-strong)", display: "flex", gap: 12, background: "#fff" }}>
-              <button id="doc-preview-download" className="btn btn-primary" style={{ flex: 1 }} onClick={() => { toast.success(`Record "${preview.name}" downloaded successfully.`); }}><Download size={14} /> Download File</button>
+              <button id="doc-preview-download" className="btn btn-primary" style={{ flex: 1 }} onClick={() => triggerDocumentDownload(preview)}><Download size={14} /> Download File</button>
               <button className="btn btn-secondary" onClick={() => togglePin(preview)}><Pin size={14} /> {preview.pinned ? "Unpin" : "Pin"}</button>
               <button className="btn btn-secondary" onClick={() => toggleFavorite(preview)}><Star size={14} /> {preview.favorite ? "Unfavourite" : "Favourite"}</button>
             </div>

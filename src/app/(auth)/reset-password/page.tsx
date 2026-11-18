@@ -27,7 +27,7 @@ export default function ResetPasswordPage() {
     setError("");
     try {
       // Logic for password reset update will call Firebase auth update here
-      console.log("Reset password request", data.password);
+      console.log("Reset password request submitted");
       setSent(true);
     } catch {
       setError("Unable to reset password. Link might be expired or invalid.");

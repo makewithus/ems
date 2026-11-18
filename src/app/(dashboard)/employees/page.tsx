@@ -72,7 +72,6 @@ function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }
         email: res.email || loginEmail,
         updatedAt: serverTimestamp(),
       };
-      if (passChanged) empUpdate.password = newPass;
 
       await updateDoc(doc(db, "employees", emp.id), empUpdate);
 
@@ -406,6 +405,10 @@ export default function EmployeesPage() {
 
   /* Real-time Firestore listener — newest first */
   useEffect(() => {
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
     let unsub = () => {};
     const q = query(collection(db, "employees"), orderBy("createdAt", "desc"));
     unsub = onSnapshot(
@@ -439,7 +442,7 @@ export default function EmployeesPage() {
       }
     );
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   const filtered = employees.filter((e) => {
     if (e.status === "Archived" && status !== "Archived") return false;

@@ -30,9 +30,12 @@ service firebase.storage {
       allow write: if isAdmin();
     }
     
-    match /payslips/{allPaths=**} {
+    match /payslips/{userId}/{fileName} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow write: if isAdmin();
+    }
+    match /payslips/{allPaths=**} {
+      allow read, write: if isAdmin();
     }
     
     match /avatars/{userId} {

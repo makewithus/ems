@@ -200,7 +200,6 @@ export default function AddEmployeePage() {
         salaryDate: data.salaryDate,
         profileCompletion: calculateProfileCompletion(data),
         status: "Active",
-        password: data.password,
         createdAt: now,
         updatedAt: now,
       });

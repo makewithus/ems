@@ -110,19 +110,18 @@ export default function TeamPerformancePage() {
 
   /* ── 1. Real-time Employees Listener (Deduplicated from authoritative employees collection) ── */
   useEffect(() => {
+    if (!user?.uid) return;
     if (!isAdmin) {
-      if (user?.uid) {
-        setEmployees([
-          {
-            uid: user.uid,
-            name: profile?.displayName || user.displayName || user.email || "Me",
-            employeeId: profile?.employeeId || "EMP",
-            department: profile?.department || "General",
-            designation: profile?.designation || (role === "employee" ? "Employee" : "Team Member"),
-            photoURL: profile?.photoURL,
-          },
-        ]);
-      }
+      setEmployees([
+        {
+          uid: user.uid,
+          name: profile?.displayName || user.displayName || user.email || "Me",
+          employeeId: profile?.employeeId || "EMP",
+          department: profile?.department || "General",
+          designation: profile?.designation || (role === "employee" ? "Employee" : "Team Member"),
+          photoURL: profile?.photoURL,
+        },
+      ]);
       return;
     }
 
@@ -543,6 +542,8 @@ export default function TeamPerformancePage() {
       await addDoc(collection(db, "notifications"), {
         companyId,
         userId: assignForm.assigneeId,
+        senderUid: user?.uid || "admin",
+        createdBy: user?.uid || "admin",
         title: "New Task Assigned",
         message: `${creatorName} assigned you: "${assignForm.title.trim()}" (Deadline: ${formatDate(assignForm.deadline)})`,
         type: "task",
@@ -873,9 +874,13 @@ export default function TeamPerformancePage() {
             <Users size={18} />
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>Team Workload & Capacity Overview</div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>
+              {isAdmin ? "Team Workload & Capacity Overview" : "My Workload & Capacity Overview"}
+            </div>
             <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              {employees.length} team members monitored dynamically • Identifying overloaded and delayed staff
+              {isAdmin
+                ? `${employees.length} team members monitored dynamically • Identifying overloaded and delayed staff`
+                : "Real-time summary of your assigned tasks, active workload, and delivery status"}
             </div>
           </div>
         </div>
@@ -960,7 +965,8 @@ export default function TeamPerformancePage() {
             flexShrink: 0,
           }}
         >
-          <Users size={15} /> All Employees ({employeeWorkloads.length})
+          {isAdmin ? <Users size={15} /> : <ClipboardList size={15} />}
+          <span>{isAdmin ? `All Employees (${employeeWorkloads.length})` : `My Tasks (${employeeWorkloads[0]?.totalTasks || 0})`}</span>
         </button>
 
         <button
@@ -980,7 +986,7 @@ export default function TeamPerformancePage() {
             flexShrink: 0,
           }}
         >
-          <FileCheck2 size={15} /> Review Queue
+          <FileCheck2 size={15} /> {isAdmin ? "Review Queue" : "Awaiting Review"}
           {teamMetrics.underReviewTasks > 0 && (
             <span
               style={{
@@ -1351,7 +1357,11 @@ export default function TeamPerformancePage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   {selectedEmployeeTasks.map((t) => {
                     const overdue = isTaskOverdue(t);
-                    const isTaskAssignee = user?.uid && (t.assigneeId === user.uid || t.assignedTo === user.uid);
+                    const isTaskAssignee = !!user?.uid && (
+                      t.assigneeId === user.uid ||
+                      t.assignedTo === user.uid ||
+                      (!!profile?.employeeId && (t.assigneeId === profile.employeeId || t.assignedTo === profile.employeeId))
+                    );
                     return (
                       <div
                         key={t.id}
@@ -1449,7 +1459,7 @@ export default function TeamPerformancePage() {
                             </button>
                           )}
 
-                          {!isAdmin && isTaskAssignee && t.status === "Pending" && (
+                          {!isAdmin && isTaskAssignee && isTaskPending(t.status) && (
                             <button
                               className="btn btn-secondary"
                               style={{ padding: "5px 12px", fontSize: 11, color: "var(--accent-blue)", borderColor: "rgba(59, 130, 246, 0.4)" }}
@@ -1459,7 +1469,7 @@ export default function TeamPerformancePage() {
                             </button>
                           )}
 
-                          {!isAdmin && isTaskAssignee && t.status === "In Progress" && (
+                          {!isAdmin && isTaskAssignee && isTaskInProgress(t.status) && (
                             <button
                               className="btn btn-primary"
                               style={{ background: "var(--accent-amber)", color: "#000", padding: "5px 12px", fontSize: 11, fontWeight: 700 }}
@@ -1752,7 +1762,11 @@ export default function TeamPerformancePage() {
                 <tbody>
                   {overdueAndUpcomingTasks.map((t) => {
                     const overdue = isTaskOverdue(t);
-                    const isTaskAssignee = user?.uid && (t.assigneeId === user.uid || t.assignedTo === user.uid);
+                    const isTaskAssignee = !!user?.uid && (
+                      t.assigneeId === user.uid ||
+                      t.assignedTo === user.uid ||
+                      (!!profile?.employeeId && (t.assigneeId === profile.employeeId || t.assignedTo === profile.employeeId))
+                    );
                     const empData = employees.find((e) => e.uid === t.assigneeId || e.uid === t.assignedTo);
                     const health = formatDeadlineHealth(t.deadline);
 
@@ -2009,7 +2023,7 @@ export default function TeamPerformancePage() {
                               </>
                             ) : (
                               <>
-                                {isTaskAssignee && t.status === "Pending" && (
+                                {isTaskAssignee && isTaskPending(t.status) && (
                                   <button
                                     className="btn btn-secondary"
                                     style={{ padding: "4px 10px", fontSize: 11, color: "var(--accent-blue)", borderColor: "rgba(59, 130, 246, 0.4)" }}
@@ -2018,7 +2032,7 @@ export default function TeamPerformancePage() {
                                     Start
                                   </button>
                                 )}
-                                {isTaskAssignee && t.status === "In Progress" && (
+                                {isTaskAssignee && isTaskInProgress(t.status) && (
                                   <button
                                     className="btn btn-primary"
                                     style={{ padding: "4px 10px", fontSize: 11, background: "var(--accent-amber)", color: "#000", fontWeight: 700 }}
@@ -2027,7 +2041,7 @@ export default function TeamPerformancePage() {
                                     Submit
                                   </button>
                                 )}
-                                {t.status === "Under Review" && (
+                                {isTaskUnderReview(t.status) && (
                                   <span className="badge" style={{ background: "rgba(245, 158, 11, 0.12)", color: "var(--accent-amber)", fontSize: 10.5 }}>
                                     In Review
                                   </span>

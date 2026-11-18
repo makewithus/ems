@@ -9,7 +9,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { useAttendanceStore } from "@/store/attendance.store";
 import { formatDate, fmt24to12, computeHoursWorked } from "@/lib/utils";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, query, where, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { useDepartments } from "@/hooks/useDepartments";
 import {
   useAttendanceByDate,
@@ -46,6 +46,7 @@ export default function AttendancePage() {
   const [breaking, setBreaking] = useState(false);
   const [quickGlance, setQuickGlance] = useState<{ employeeId: string; employeeName: string } | null>(null);
   const [totalHeadcount, setTotalHeadcount] = useState(0);
+  const [onLeaveCount, setOnLeaveCount] = useState(0);
   const { departments } = useDepartments();
   const today = formatDate(new Date().toISOString());
   const todayStr = new Date().toISOString().split("T")[0];
@@ -58,6 +59,27 @@ export default function AttendancePage() {
     });
     return () => unsub();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const qLeaves = query(
+      collection(db, "leaveRequests"),
+      where("status", "==", "Approved")
+    );
+    const unsub = onSnapshot(qLeaves, (snap: QuerySnapshot<DocumentData>) => {
+      const activeLeaves = new Set<string>();
+      snap.docs.forEach((d: DocumentData) => {
+        const data = d.data();
+        const start = data.startDate;
+        const end = data.endDate;
+        if (start && end && selectedDate >= start && selectedDate <= end) {
+          activeLeaves.add(data.employeeId);
+        }
+      });
+      setOnLeaveCount(activeLeaves.size);
+    });
+    return () => unsub();
+  }, [isAdmin, selectedDate]);
 
   const { records: adminRecords, loading: adminLoading } = useAttendanceByDate(
     isAdmin ? selectedDate : ""
@@ -87,13 +109,15 @@ export default function AttendancePage() {
   const lateOnly    = filteredAdmin.filter((r) => r.status === "Late").length;
   const halfDayOnly = filteredAdmin.filter((r) => r.status === "Half Day").length;
   const loggedCount = presentOnly + lateOnly + halfDayOnly;
-  const absentCount = totalHeadcount > 0 ? Math.max(0, totalHeadcount - loggedCount) : filteredAdmin.filter((r) => r.status === "Absent").length;
+  const eligibleWorkforce = Math.max(0, totalHeadcount - onLeaveCount);
+  const absentCount = totalHeadcount > 0 ? Math.max(0, eligibleWorkforce - loggedCount) : filteredAdmin.filter((r) => r.status === "Absent").length;
 
   const stats = {
     Present:    presentOnly,
-    Absent:     absentCount,
     Late:       lateOnly,
     "Half Day": halfDayOnly,
+    "On Leave": onLeaveCount,
+    Absent:     absentCount,
   };
 
   const handleClockIn = async () => {
@@ -330,12 +354,13 @@ export default function AttendancePage() {
           {/* ── Daily Overview Tab ── */}
           {adminTab === "overview" && (
             <>
-              <div className="att-stats-grid" style={{ display: "grid", gap: 14, marginBottom: 20 }}>
+              <div className="att-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 14, marginBottom: 20 }}>
                 {[
                   { label: "Present",  value: stats.Present,     color: "var(--accent-green)" },
-                  { label: "Absent",   value: stats.Absent,      color: "var(--accent-red)" },
                   { label: "Late",     value: stats.Late,        color: "var(--accent-amber)" },
                   { label: "Half Day", value: stats["Half Day"], color: "var(--accent-purple)" },
+                  { label: "On Leave", value: stats["On Leave"], color: "#3B82F6" },
+                  { label: "Absent",   value: stats.Absent,      color: "var(--accent-red)" },
                 ].map((s) => (
                   <div key={s.label} className="card" style={{ padding: "14px 18px" }}>
                     <div style={{ fontSize: 24, fontWeight: 700, color: s.color, marginBottom: 4 }}>{s.value}</div>

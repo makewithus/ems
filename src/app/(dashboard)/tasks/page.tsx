@@ -149,16 +149,15 @@ export default function TasksPage() {
 
   /* ── Load Employees for Assignment (Deduplicated) ── */
   useEffect(() => {
+    if (!user?.uid) return;
     if (!isAdmin) {
-      if (user?.uid) {
-        setEmployees([
-          {
-            uid: user.uid,
-            name: profile?.displayName || user.displayName || user.email || "Me",
-            employeeId: (profile as { employeeId?: string })?.employeeId || "Current User",
-          },
-        ]);
-      }
+      setEmployees([
+        {
+          uid: user.uid,
+          name: profile?.displayName || user.displayName || user.email || "Me",
+          employeeId: (profile as { employeeId?: string })?.employeeId || "Current User",
+        },
+      ]);
       return;
     }
 
@@ -580,6 +579,8 @@ export default function TasksPage() {
         await addDoc(collection(db, "notifications"), {
           companyId,
           userId: newTask.assigneeId,
+          senderUid: user?.uid || "admin",
+          createdBy: user?.uid || "admin",
           title: "New Task Assigned",
           message: `${creatorName} assigned you: "${newTask.title.trim()}" (Deadline: ${formatDate(newTask.deadline)})`,
           type: "task",
@@ -678,6 +679,8 @@ export default function TasksPage() {
         await addDoc(collection(db, "notifications"), {
           companyId: editingTask.companyId || "default",
           userId: editFormData.assigneeId,
+          senderUid: user?.uid || "admin",
+          createdBy: user?.uid || "admin",
           title: "Task Reassigned to You",
           message: `Admin reassigned task "${editFormData.title.trim()}" to you`,
           type: "task",

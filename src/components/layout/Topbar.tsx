@@ -28,13 +28,17 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
     }
   };
 
+  const isAdmin = role === "super_admin" || role === "hr_admin";
+
   useEffect(() => {
     if (!profile?.uid) return;
-    const q = query(
-      collection(db, "notifications"),
-      where("userId", "==", profile.uid),
-      where("isRead", "==", false)
-    );
+    const q = isAdmin
+      ? query(collection(db, "notifications"), where("isRead", "==", false))
+      : query(
+          collection(db, "notifications"),
+          where("userId", "==", profile.uid),
+          where("isRead", "==", false)
+        );
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -45,7 +49,7 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
       }
     );
     return () => unsub();
-  }, [profile?.uid]);
+  }, [profile?.uid, isAdmin]);
 
   const handleSignOut = () => {
     signOut();

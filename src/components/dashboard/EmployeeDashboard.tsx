@@ -119,14 +119,13 @@ export default function EmployeeDashboard() {
 
   // Fetch salary date from employee record
   useEffect(() => {
-    const docId = user?.uid || employeeId;
-    if (!docId) return;
-    const empRef = doc(db, "employees", docId);
+    if (!user?.uid) return;
+    const q = query(collection(db, "employees"), where("uid", "==", user.uid));
     const unsub = onSnapshot(
-      empRef,
+      q,
       (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
+        if (!snap.empty) {
+          const data = snap.docs[0].data();
           setSalaryDate(data.salaryDate !== undefined && data.salaryDate !== null ? String(data.salaryDate) : "");
           setJoiningDate(data.joiningDate ?? "");
         }
@@ -134,7 +133,7 @@ export default function EmployeeDashboard() {
       (err) => console.error("Employee profile fetch error:", err)
     );
     return () => unsub();
-  }, [user?.uid, employeeId]);
+  }, [user?.uid]);
 
   // Compute adjusted payment date
   const paymentInfo = useMemo(() => {

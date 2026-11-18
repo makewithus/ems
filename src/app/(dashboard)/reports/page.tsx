@@ -55,6 +55,10 @@ export default function ReportsPage() {
   const [attendanceTrend, setAttendanceTrend] = useState<{ month: string; present: number; absent: number; late: number }[]>([]);
   const [attLoading, setAttLoading] = useState(true);
   useEffect(() => {
+    if (!isAdmin) {
+      setAttLoading(false);
+      return;
+    }
     const q = query(collection(db, "attendance"), orderBy("date", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       const map: Record<string, { present: number; absent: number; late: number }> = {};
@@ -72,12 +76,16 @@ export default function ReportsPage() {
       setAttLoading(false);
     }, () => setAttLoading(false));
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   // ── Live Payroll trend (monthly) ──
   const [payrollTrend, setPayrollTrend] = useState<{ month: string; total: number }[]>([]);
   const [payLoading, setPayLoading] = useState(true);
   useEffect(() => {
+    if (!isAdmin) {
+      setPayLoading(false);
+      return;
+    }
     const unsub = onSnapshot(collection(db, "payroll"), (snap) => {
       const map: Record<string, number> = {};
       snap.docs.forEach((d) => {
@@ -98,12 +106,16 @@ export default function ReportsPage() {
       setPayLoading(false);
     }, () => setPayLoading(false));
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   // ── Live Leave trend (monthly by type) ──
   const [leaveTrend, setLeaveTrend] = useState<{ month: string; casual: number; medical: number; emergency: number }[]>([]);
   const [leaveLoading, setLeaveLoading] = useState(true);
   useEffect(() => {
+    if (!isAdmin) {
+      setLeaveLoading(false);
+      return;
+    }
     const q = query(collection(db, "leaveRequests"), orderBy("createdAt", "asc"));
     const unsub = onSnapshot(q, (snap) => {
       const map: Record<string, { casual: number; medical: number; emergency: number }> = {};
@@ -121,12 +133,16 @@ export default function ReportsPage() {
       setLeaveLoading(false);
     }, () => setLeaveLoading(false));
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   // ── Live Employee stats ──
   const [empStats, setEmpStats] = useState({ total: 0, active: 0, inactive: 0, deptBreakdown: [] as { name: string; count: number }[], growthTrend: [] as { month: string; employees: number }[] });
   const [empLoading, setEmpLoading] = useState(true);
   useEffect(() => {
+    if (!isAdmin) {
+      setEmpLoading(false);
+      return;
+    }
     const unsub = onSnapshot(collection(db, "employees"), (snap) => {
       const all = snap.docs.map((d) => d.data());
       const deptMap: Record<string, number> = {};
@@ -158,11 +174,12 @@ export default function ReportsPage() {
       setEmpLoading(false);
     }, () => setEmpLoading(false));
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   // ── Live Document stats ──
   const [docStats, setDocStats] = useState({ total: 0, byFolder: [] as { name: string; count: number }[] });
   useEffect(() => {
+    if (!isAdmin) return;
     const unsub = onSnapshot(collection(db, "documents"), (snap) => {
       const folderMap: Record<string, number> = {};
       snap.docs.forEach((d) => {
@@ -172,7 +189,7 @@ export default function ReportsPage() {
       setDocStats({ total: snap.size, byFolder: Object.entries(folderMap).map(([name, count]) => ({ name, count })) });
     }, () => {});
     return () => unsub();
-  }, []);
+  }, [isAdmin]);
 
   // Attendance summary stats
   const attTotal = attendanceTrend.reduce((s, r) => ({ present: s.present + r.present, absent: s.absent + r.absent, late: s.late + r.late }), { present: 0, absent: 0, late: 0 });
