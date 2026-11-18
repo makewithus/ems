@@ -8,7 +8,7 @@ import {
   ArrowLeft, ArrowRight, Loader2, User, Briefcase, KeyRound, Check,
   Eye, EyeOff, Copy, CheckCheck, X, Lock,
 } from "lucide-react";
-import { EMPLOYMENT_TYPES } from "@/lib/utils";
+import { EMPLOYMENT_TYPES, calculateProfileCompletion } from "@/lib/utils";
 import { useDepartments } from "@/hooks/useDepartments";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
@@ -21,19 +21,31 @@ import { useAuthStore } from "@/store/auth.store";
 import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
-  firstName:      z.string().min(1, "Required"),
-  lastName:       z.string().min(1, "Required"),
-  phone:          z.string().optional(),
-  dob:            z.string().optional(),
+  firstName:      z.string().min(1, "First name is required").regex(/^[A-Za-z\s'-]+$/, "First name must contain letters only"),
+  lastName:       z.string().min(1, "Last name is required").regex(/^[A-Za-z\s'-]+$/, "Last name must contain letters only"),
+  phone:          z.string().optional().refine((val) => {
+                    if (!val || !val.trim()) return true;
+                    const cleaned = val.replace(/[\s\-()]/g, "");
+                    return /^(\+?\d{7,15})$/.test(cleaned);
+                  }, "Please enter a valid phone number (digits only, 7-15 digits)"),
+  dob:            z.string().optional().refine((val) => {
+                    if (!val || !val.trim()) return true;
+                    const d = new Date(val);
+                    if (isNaN(d.getTime())) return false;
+                    const now = new Date();
+                    if (d >= now) return false;
+                    const age = now.getFullYear() - d.getFullYear() - (now < new Date(now.getFullYear(), d.getMonth(), d.getDate()) ? 1 : 0);
+                    return age >= 18;
+                  }, "Date of birth must be a past date and employee must be at least 18 years old"),
   gender:         z.string().optional(),
   address:        z.string().optional(),
-  department:     z.string().min(1, "Required"),
-  designation:    z.string().min(1, "Required"),
-  joiningDate:    z.string().min(1, "Required"),
-  employmentType: z.string().min(1, "Required"),
-  salary:         z.coerce.number().min(1, "Required"),
+  department:     z.string().min(1, "Department is required"),
+  designation:    z.string().min(1, "Designation is required"),
+  joiningDate:    z.string().min(1, "Joining date is required"),
+  employmentType: z.string().min(1, "Employment type is required"),
+  salary:         z.coerce.number().min(1, "Salary is required"),
   salaryDate:     z.coerce.number().min(1).max(31, "Must be between 1 and 31"),
-  employeeId:     z.string().min(1, "Required"),
+  employeeId:     z.string().min(1, "Employee ID is required"),
   password:       z.string()
                     .min(6, "Min 6 characters")
                     .regex(/[A-Z]/, "Requires at least one capital letter")
@@ -186,6 +198,7 @@ export default function AddEmployeePage() {
         employmentType: data.employmentType,
         salary: data.salary,
         salaryDate: data.salaryDate,
+        profileCompletion: calculateProfileCompletion(data),
         status: "Active",
         password: data.password,
         createdAt: now,

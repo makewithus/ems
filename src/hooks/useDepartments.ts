@@ -4,12 +4,17 @@ import { db } from "@/lib/firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
 const SEED_DEPARTMENTS = [
+  "Engineering",
+  "Management",
+  "Human Resources",
   "Developer",
   "Designer",
   "Project Manager",
-  "Super Admin",
   "AI",
   "Marketing",
+  "Sales",
+  "Finance",
+  "Operations",
 ];
 
 

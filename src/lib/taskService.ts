@@ -12,6 +12,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { Task, TaskStatus, TaskPriority, TaskActivityLog, Role } from "@/types";
+import { isValidUrl } from "./utils";
 
 export function toDateObj(val: any): Date | string {
   if (!val) return "";
@@ -284,6 +285,14 @@ export async function transitionTaskStatus(options: TransitionOptions): Promise<
     };
   }
 
+  // URL validation for proof link
+  if (proofURL && proofURL.trim() !== "" && !isValidUrl(proofURL.trim())) {
+    return {
+      success: false,
+      error: "Proof link must be a valid URL starting with http:// or https://",
+    };
+  }
+
   const updates: Record<string, any> = {
     status: targetStatus,
     updatedAt: serverTimestamp(),
@@ -373,13 +382,34 @@ export async function transitionTaskStatus(options: TransitionOptions): Promise<
 
     if (!isAdmin) {
       // Notify admins that employee updated/submitted task
-      const adminSnap = await getDocs(
-        query(collection(db, "users"), where("role", "in", ["super_admin", "hr_admin"]))
-      );
-      const notifs = adminSnap.docs.map((ad) =>
-        addDoc(collection(db, "notifications"), {
+      try {
+        const adminSnap = await getDocs(
+          query(collection(db, "users"), where("role", "in", ["super_admin", "hr_admin"]))
+        );
+        const adminIds = adminSnap.docs.map((ad) => ad.id);
+        if (adminIds.length === 0) adminIds.push("admin");
+        const notifs = adminIds.map((adId) =>
+          addDoc(collection(db, "notifications"), {
+            companyId,
+            userId: adId,
+            targetRole: "admin",
+            title: targetStatus === "Under Review" ? "Task Submitted for Review" : "Task Status Updated",
+            message: `${actor.displayName} ${
+              targetStatus === "Under Review" ? "submitted" : "moved"
+            } "${currentTask.title}" to "${targetStatus}"`,
+            type: "task",
+            isRead: false,
+            link: "/tasks/performance",
+            createdAt: serverTimestamp(),
+          }).catch(() => {})
+        );
+        await Promise.allSettled(notifs);
+      } catch (notifErr) {
+        console.warn("Failed to notify specific admin uids, saving general admin notification:", notifErr);
+        await addDoc(collection(db, "notifications"), {
           companyId,
-          userId: ad.id,
+          userId: "admin",
+          targetRole: "admin",
           title: targetStatus === "Under Review" ? "Task Submitted for Review" : "Task Status Updated",
           message: `${actor.displayName} ${
             targetStatus === "Under Review" ? "submitted" : "moved"
@@ -388,9 +418,8 @@ export async function transitionTaskStatus(options: TransitionOptions): Promise<
           isRead: false,
           link: "/tasks/performance",
           createdAt: serverTimestamp(),
-        }).catch(() => {})
-      );
-      await Promise.allSettled(notifs);
+        }).catch(() => {});
+      }
     } else if (currentTask.assigneeId && currentTask.assigneeId !== actor.uid) {
       // Notify employee that admin approved, modified, or updated task
       let notifTitle = "Task Status Updated by Admin";

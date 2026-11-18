@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Plus, X, Megaphone, Bell, AlertTriangle, AlertCircle, Info, Check, Loader2 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
-import { formatDate } from "@/lib/utils";
+import { formatDate, normalizeNoticePriority } from "@/lib/utils";
 import { useDepartments } from "@/hooks/useDepartments";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
@@ -14,7 +14,8 @@ import {
 const PRIORITY_CONFIG = {
   Low:      { color: "var(--text-muted)",    bg: "rgba(255,255,255,0.06)", icon: Info },
   Normal:   { color: "var(--accent-blue)",   bg: "var(--accent-blue-dim)", icon: Bell },
-  Urgent:   { color: "var(--accent-amber)",  bg: "var(--accent-amber-dim)", icon: AlertTriangle },
+  High:     { color: "var(--accent-amber)",  bg: "var(--accent-amber-dim)", icon: AlertTriangle },
+  Urgent:   { color: "#f97316",              bg: "rgba(249,115,22,0.15)", icon: AlertTriangle },
   Critical: { color: "var(--accent-red)",    bg: "var(--accent-red-dim)",  icon: AlertCircle },
 };
 
@@ -83,7 +84,7 @@ export default function NoticesPage() {
             title:   data.title       ?? "",
             desc:    data.description ?? "",
             dept:    data.department  ?? "All",
-            priority:data.priority    ?? "Normal",
+            priority:normalizeNoticePriority(data.priority),
             date:    data.publishDate ?? (data.createdAt?.toDate?.().toISOString().split("T")[0] ?? ""),
             expiry:  data.expiryDate  ?? "",
             readBy:  Array.isArray(data.readBy) ? data.readBy : [],
@@ -129,6 +130,14 @@ export default function NoticesPage() {
 
   const publishNotice = async () => {
     if (!newNotice.title.trim()) { toast.error("Please enter a notice title."); return; }
+    
+    // Validate publish and expiry dates (A-23)
+    const pubDate = newNotice.publish || new Date().toISOString().split("T")[0];
+    if (newNotice.expiry && newNotice.expiry < pubDate) {
+      toast.error("Expiry date cannot be earlier than publish date.");
+      return;
+    }
+
     try {
       if (editingId) {
         await updateDoc(doc(db, "notices", editingId), {
@@ -162,9 +171,17 @@ export default function NoticesPage() {
     } catch { toast.error(editingId ? "Failed to update notice." : "Failed to publish notice."); }
   };
 
-  const filtered = filter === "All" ? notices : notices.filter((n) => n.priority === filter);
+  const todayStr = new Date().toISOString().split("T")[0];
+  // Hide notices before publish date or after expiry date (A-23)
+  const activeNotices = notices.filter((n) => {
+    if (n.date && n.date > todayStr) return false;
+    if (n.expiry && n.expiry < todayStr) return false;
+    return true;
+  });
+
+  const filtered = filter === "All" ? activeNotices : activeNotices.filter((n) => n.priority === filter);
   /* Count notices not yet read — consider both Firestore readBy and local optimistic set */
-  const unreadCount = notices.filter(
+  const unreadCount = activeNotices.filter(
     (n) => !n.readBy.includes(currentUid) && !localReadIds.has(n.id)
   ).length;
 
@@ -190,7 +207,7 @@ export default function NoticesPage() {
 
       {/* Priority filter */}
       <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", flexWrap: "nowrap", paddingBottom: 4, WebkitOverflowScrolling: "touch" }}>
-        {["All", "Critical", "Urgent", "Normal", "Low"].map((p) => (
+        {["All", "Critical", "Urgent", "High", "Normal", "Low"].map((p) => (
           <button key={p} onClick={() => setFilter(p)} className={`btn ${filter === p ? "btn-primary" : "btn-secondary"}`} style={{ fontSize: 12, padding: "6px 14px", flexShrink: 0 }}>
             {p}
           </button>
@@ -296,7 +313,7 @@ export default function NoticesPage() {
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Priority</label>
                   <select id="notice-priority" className="input-base" value={newNotice.priority} onChange={(e) => setNewNotice((p) => ({ ...p, priority: e.target.value }))}>
-                    {["Low", "Normal", "Urgent", "Critical"].map((p) => <option key={p} value={p}>{p}</option>)}
+                    {["Low", "Normal", "High", "Urgent", "Critical"].map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
                 <div>

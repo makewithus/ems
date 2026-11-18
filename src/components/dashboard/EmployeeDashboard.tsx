@@ -156,7 +156,7 @@ export default function EmployeeDashboard() {
       if (!isWeekend) {
         const dStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
         const rec = recordsMap[dStr];
-        if (!rec || rec.status === "Absent") {
+        if (rec && rec.status === "Absent") {
           absentCount++;
         }
       }
@@ -238,9 +238,9 @@ export default function EmployeeDashboard() {
   const [clocking, setClocking] = useState(false);
 
   // Live notices
-  const [notices, setNotices] = useState<{ id: string; title: string; priority: string; createdAt: string }[]>([]);
+  const [notices, setNotices] = useState<{ id: string; title: string; priority: string; createdAt: string; readBy: string[] }[]>([]);
   useEffect(() => {
-    const q = query(collection(db, "notices"), orderBy("createdAt", "desc"), limit(3));
+    const q = query(collection(db, "notices"), orderBy("createdAt", "desc"), limit(10));
     const unsub = onSnapshot(q, (snap) => {
       setNotices(snap.docs.map((d) => {
         const data = d.data();
@@ -249,12 +249,19 @@ export default function EmployeeDashboard() {
           id: d.id,
           title: data.title ?? "",
           priority: data.priority ?? "Normal",
+          readBy: Array.isArray(data.readBy) ? data.readBy : [],
           createdAt: ts ? ts.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
         };
       }));
     }, () => {});
     return () => unsub();
   }, []);
+
+  const unreadNoticesCount = useMemo(() => {
+    const myUid = user?.uid;
+    if (!myUid) return notices.length;
+    return notices.filter((n) => !n.readBy || !n.readBy.includes(myUid)).length;
+  }, [notices, user?.uid]);
 
   // Live payslip (latest)
   const [latestPayslip, setLatestPayslip] = useState<{ net: number; month: string; status: string } | null>(null);
@@ -291,12 +298,18 @@ export default function EmployeeDashboard() {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      // Skip weekends
-      const day = d.getDay();
-      if (day === 0 || day === 6) continue;
       const rec = empRecords.find((r) => r.date === dateStr);
+      const day = d.getDay();
+      const isWeekend = day === 0 || day === 6;
+
       if (rec && (rec.status === "Present" || rec.status === "Late")) {
         streak++;
+      } else if (isWeekend) {
+        // Weekend without work: don't break streak if past days were present
+        continue;
+      } else if (i === 0 && !rec) {
+        // Today before clock-in: don't break streak for previous days
+        continue;
       } else {
         break;
       }
@@ -304,35 +317,22 @@ export default function EmployeeDashboard() {
     return streak;
   }, [empRecords]);
 
-  // Last 5 working days activity data
+  // Last 7 days activity data (full week including weekends)
   const activityData = useMemo(() => {
-    const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const today = new Date();
     const result: { day: string; hours: number }[] = [];
-    let dayIdx = 0;
-    let i = 0;
-    while (result.length < 5 && i < 14) {
+    for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
-      i++;
       const dow = d.getDay();
-      if (dow === 0 || dow === 6) continue;
       const dateStr = d.toISOString().split("T")[0];
       const rec = empRecords.find((r) => r.date === dateStr);
       let hours = 0;
-      if (rec?.clockIn && rec?.clockOut) {
-        const inMins = parseTimeToMinutes(rec.clockIn);
-        const outMins = parseTimeToMinutes(rec.clockOut);
-        if (inMins !== null && outMins !== null && outMins > inMins) {
-          const diff = outMins - inMins;
-          hours = Math.max(0, parseFloat((diff / 60).toFixed(1)));
-        }
-      } else if (rec?.hoursWorked) {
-        hours = parseHours(rec.hoursWorked);
+      if (rec) {
+        hours = getRecordHours(rec);
       }
-      if (isNaN(hours)) hours = 0;
-      result.unshift({ day: days[dow === 0 ? 6 : dow - 1] ?? `D${dayIdx}`, hours });
-      dayIdx++;
+      result.push({ day: days[dow], hours: Number(hours.toFixed(1)) });
     }
     return result;
   }, [empRecords]);
@@ -422,10 +422,10 @@ export default function EmployeeDashboard() {
     },
     {
       label: "Notices",
-      value: String(notices.length),
+      value: String(unreadNoticesCount),
       icon: CalendarDays,
       color: "var(--accent-blue)",
-      sub: notices.length > 0 ? notices[0].title.slice(0, 28) + "…" : "No new notices",
+      sub: unreadNoticesCount > 0 ? `${unreadNoticesCount} unread notice${unreadNoticesCount !== 1 ? "s" : ""}` : "All caught up",
     },
   ];
 
@@ -466,16 +466,16 @@ export default function EmployeeDashboard() {
               <Loader2 size={14} className="animate-spin" /> Loading…
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, marginBottom: 16 }}>
               {[
                 { label: "Clock In",  value: todayRecord?.clockIn  ? fmt24to12(todayRecord.clockIn)  : "—", color: hasClockedIn  ? "var(--accent-green)" : "var(--text-muted)" },
                 { label: "Clock Out", value: todayRecord?.clockOut ? fmt24to12(todayRecord.clockOut) : "—", color: hasClockedOut ? "var(--accent-blue)"  : "var(--text-muted)" },
                 { label: "Break Start", value: todayRecord?.breakStart ? fmt24to12(todayRecord.breakStart) : "—", color: todayRecord?.breakStart ? "var(--accent-amber)" : "var(--text-muted)" },
                 { label: "Break End",   value: todayRecord?.breakEnd   ? fmt24to12(todayRecord.breakEnd)   : "—", color: todayRecord?.breakEnd   ? "var(--accent-amber)" : "var(--text-muted)" },
               ].map((item) => (
-                <div key={item.label} style={{ padding: "12px 14px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)" }}>
+                <div key={item.label} style={{ padding: "12px 14px", background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", minWidth: 0 }}>
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>{item.label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: item.color }}>{item.value}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: item.color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.value}</div>
                 </div>
               ))}
             </div>
@@ -746,11 +746,17 @@ export default function EmployeeDashboard() {
                         `Status: ${selectedRecord.status}`
                       )
                     ) : (
-                      new Date(selectedCalendarDate).getDay() === 0 || new Date(selectedCalendarDate).getDay() === 6 ? "Weekend Rest Day" : "Absent — No log found"
+                      selectedCalendarDate === todayStr ? (
+                        "Pending — Today's shift has not been started yet"
+                      ) : new Date(selectedCalendarDate).getDay() === 0 || new Date(selectedCalendarDate).getDay() === 6 ? (
+                        "Weekend Rest Day"
+                      ) : (
+                        "Absent — No log found"
+                      )
                     )}
                   </div>
                 </div>
-                {selectedRecord && (
+                {selectedRecord ? (
                   <span className="badge" style={{
                     background: selectedRecord.status === "Present" || selectedRecord.status === "Late" ? "var(--accent-green-dim)" : (selectedRecord.status === "Absent" ? "var(--accent-red-dim)" : "var(--accent-amber-dim)"),
                     color: selectedRecord.status === "Present" || selectedRecord.status === "Late" ? "var(--accent-green)" : (selectedRecord.status === "Absent" ? "var(--accent-red)" : "var(--accent-amber)"),
@@ -758,7 +764,11 @@ export default function EmployeeDashboard() {
                   }}>
                     {selectedRecord.status}
                   </span>
-                )}
+                ) : selectedCalendarDate === todayStr ? (
+                  <span className="badge" style={{ background: "rgba(245, 158, 11, 0.15)", color: "var(--accent-amber)", border: "none" }}>
+                    Pending
+                  </span>
+                ) : null}
               </div>
 
               {/* Productivity metrics */}

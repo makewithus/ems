@@ -1,13 +1,13 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   UserPlus, Search, Filter, Download, LayoutGrid, List,
   MoreHorizontal, Mail, Phone, Building2, ChevronDown, Users, Loader2,
-  Eye, Trash2, CheckCircle, XCircle, KeyRound, EyeOff,
+  Eye, Trash2, CheckCircle, XCircle, KeyRound, EyeOff, X,
 } from "lucide-react";
-import { formatDate, getInitials } from "@/lib/utils";
+import { formatDate, getInitials, calculateProfileCompletion } from "@/lib/utils";
 import { db } from "@/lib/firebase";
 import {
   collection, onSnapshot, query, orderBy,
@@ -46,13 +46,12 @@ const statusBg: Record<string, string> = {
   Archived: "rgba(255,255,255,0.06)",
 };
 
-/* ─── Credentials Modal ─── */
+/* ─── Credentials Modal (Secure Password Reset, Never Reveals Plaintext) ─── */
 function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }) {
   const [showPass, setShowPass] = useState(false);
   const [newPass, setNewPass]   = useState("");
   const [loginEmail, setLoginEmail] = useState(emp.email || "");
-  const [curPass, setCurPass]   = useState(emp.password || "");
-  const [showCur, setShowCur]   = useState(false);
+  const [curPass, setCurPass]   = useState("");
   const [saving, setSaving]     = useState(false);
 
   const handleSave = async () => {
@@ -100,8 +99,8 @@ function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
       <div className="card" style={{ padding: 28, width: "100%", maxWidth: 440, background: "var(--bg-primary)" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>Portal Credentials</div>
-          <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={onClose}><EyeOff size={16} /></button>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Manage Password &amp; Access</div>
+          <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={onClose}><X size={16} /></button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {/* Username (read-only) */}
@@ -115,12 +114,7 @@ function CredentialsModal({ emp, onClose }: { emp: EmpRow; onClose: () => void }
           </div>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>Current Password</label>
-            <div style={{ position: "relative" }}>
-              <input className="input-base" type={showCur ? "text" : "password"} value={curPass} onChange={(e) => setCurPass(e.target.value)} placeholder="Enter current password" />
-              <button type="button" className="btn btn-ghost" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", padding: "4px 6px" }} onClick={() => setShowCur(!showCur)}>
-                {showCur ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
+            <input className="input-base" type="password" value={curPass} onChange={(e) => setCurPass(e.target.value)} placeholder="Enter current password to verify" />
           </div>
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em" }}>New Password</label>
@@ -385,10 +379,17 @@ function ActionMenu({
 
 export default function EmployeesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get("search") || searchParams.get("q") || "";
   const { role } = useAuthStore();
   const isAdmin = role === "super_admin" || role === "hr_admin";
   const [view, setView] = useState<"table" | "card">("table");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
+
+  useEffect(() => {
+    const q = searchParams.get("search") || searchParams.get("q");
+    if (q) setSearch(q);
+  }, [searchParams]);
   const [dept, setDept] = useState("All");
   const [status, setStatus] = useState("All");
   const [employees, setEmployees] = useState<EmpRow[]>([]);

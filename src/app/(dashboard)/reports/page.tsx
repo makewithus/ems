@@ -8,6 +8,7 @@ import {
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { useAuthStore } from "@/store/auth.store";
+import { formatPayrollMonth } from "@/lib/utils";
 
 const REPORT_TYPES = [
   { id: "attendance", label: "Attendance Report",  icon: Calendar,   color: "var(--accent-blue)"   },
@@ -81,17 +82,19 @@ export default function ReportsPage() {
       const map: Record<string, number> = {};
       snap.docs.forEach((d) => {
         const data = d.data();
-        const month: string = data.month ?? "";
-        if (!month) return;
-        map[month] = (map[month] || 0) + (data.net ?? 0);
+        const formatted = formatPayrollMonth(data.month, data.year);
+        if (!formatted) return;
+        map[formatted] = (map[formatted] || 0) + (data.net ?? 0);
       });
-      // Convert "June 2026" style to "Jun '26" for chart
-      const arr = Object.entries(map).map(([month, total]) => {
-        const d = new Date(`1 ${month}`);
-        const label = isNaN(d.getTime()) ? month : d.toLocaleString("default", { month: "short", year: "2-digit" });
-        return { month: label, total };
+      // Convert formatted "October 2026" to "Oct '26" with strict chronological sort
+      const arr = Object.entries(map).map(([mName, total]) => {
+        const d = new Date(`1 ${mName}`);
+        const label = isNaN(d.getTime()) ? mName : d.toLocaleString("default", { month: "short", year: "2-digit" });
+        const time = isNaN(d.getTime()) ? 0 : d.getTime();
+        return { month: label, total, time };
       });
-      setPayrollTrend(arr.slice(-6));
+      arr.sort((a, b) => a.time - b.time);
+      setPayrollTrend(arr.map(({ month, total }) => ({ month, total })).slice(-6));
       setPayLoading(false);
     }, () => setPayLoading(false));
     return () => unsub();
@@ -127,7 +130,7 @@ export default function ReportsPage() {
     const unsub = onSnapshot(collection(db, "employees"), (snap) => {
       const all = snap.docs.map((d) => d.data());
       const deptMap: Record<string, number> = {};
-      const monthMap: Record<string, number> = {};
+      const sortMap: Record<string, { label: string; count: number }> = {};
       let active = 0, inactive = 0;
       all.forEach((e) => {
         if (e.status === "Active") active++;
@@ -135,14 +138,20 @@ export default function ReportsPage() {
         const dept = e.department || "Other";
         deptMap[dept] = (deptMap[dept] || 0) + 1;
         if (e.createdAt) {
-          const key = monthKey(e.createdAt);
-          monthMap[key] = (monthMap[key] || 0) + 1;
+          const d = e.createdAt?.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
+          if (!isNaN(d.getTime())) {
+            const sortKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            const label = d.toLocaleString("default", { month: "short", year: "2-digit" });
+            if (!sortMap[sortKey]) sortMap[sortKey] = { label, count: 0 };
+            sortMap[sortKey].count++;
+          }
         }
       });
+      const sortedKeys = Object.keys(sortMap).sort();
       let running = 0;
-      const growthTrend = Object.entries(monthMap).map(([month, count]) => {
-        running += count;
-        return { month, employees: running };
+      const growthTrend = sortedKeys.map((k) => {
+        running += sortMap[k].count;
+        return { month: sortMap[k].label, employees: running };
       }).slice(-6);
       const deptBreakdown = Object.entries(deptMap).map(([name, count]) => ({ name, count }));
       setEmpStats({ total: all.length, active, inactive, deptBreakdown, growthTrend });

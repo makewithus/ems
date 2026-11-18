@@ -7,7 +7,7 @@ import {
   Save, X, ChevronDown, Eye, EyeOff, CalendarClock,
   KeyRound, ClipboardList,
 } from "lucide-react";
-import { formatDate, getInitials, formatCurrency, EMPLOYMENT_TYPES } from "@/lib/utils";
+import { formatDate, getInitials, formatCurrency, EMPLOYMENT_TYPES, calculateProfileCompletion, computeHoursWorked, formatPayrollMonth } from "@/lib/utils";
 import { useDepartments } from "@/hooks/useDepartments";
 import { db } from "@/lib/firebase";
 import {
@@ -321,8 +321,30 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
   );
 }
 
+function parseSalaryDay(salaryDate: string | number | undefined): number | null {
+  if (salaryDate === undefined || salaryDate === null || salaryDate === "") return null;
+  const num = Number(salaryDate);
+  if (!isNaN(num) && num >= 1 && num <= 31) {
+    return num;
+  }
+  const parsed = new Date(String(salaryDate));
+  if (!isNaN(parsed.getTime())) {
+    return parsed.getDate();
+  }
+  return null;
+}
+
+function formatSalaryDateDisplay(salaryDate: string | number | undefined): string {
+  if (!salaryDate) return "—";
+  const day = parseSalaryDay(salaryDate);
+  if (day !== null) {
+    return `${day}${getOrdinal(day)} of each month`;
+  }
+  return formatDate(String(salaryDate));
+}
+
 /* ── Adjusted Payment Date Card ──────────────────────────── */
-function AdjustedPaymentCard({ employeeId, salaryDate }: { employeeId: string; salaryDate: string }) {
+function AdjustedPaymentCard({ employeeId, salaryDate }: { employeeId: string; salaryDate: string | number }) {
   const [absentCount, setAbsentCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -330,6 +352,8 @@ function AdjustedPaymentCard({ employeeId, salaryDate }: { employeeId: string; s
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const prefix = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+
+  const baseDayOfMonth = parseSalaryDay(salaryDate);
 
   useEffect(() => {
     if (!employeeId) return;
@@ -357,23 +381,19 @@ function AdjustedPaymentCard({ employeeId, salaryDate }: { employeeId: string; s
   }, [employeeId, prefix]);
 
   const adjustedDate = useMemo(() => {
-    if (!salaryDate) return null;
+    if (baseDayOfMonth === null) return null;
     try {
-      const base = new Date(salaryDate);
-      if (isNaN(base.getTime())) return null;
       // Use the salary date's day-of-month in the current month/year
-      const payDate = new Date(currentYear, currentMonth, base.getDate());
+      const payDate = new Date(currentYear, currentMonth, baseDayOfMonth);
       payDate.setDate(payDate.getDate() + absentCount);
       return payDate;
     } catch {
       return null;
     }
-  }, [salaryDate, absentCount, currentMonth, currentYear]);
+  }, [baseDayOfMonth, absentCount, currentMonth, currentYear]);
 
   if (loading) return null;
-  if (!adjustedDate) return null;
-
-  const baseDayOfMonth = new Date(salaryDate).getDate();
+  if (!adjustedDate || baseDayOfMonth === null) return null;
 
   return (
     <div className="card" style={{
@@ -424,6 +444,346 @@ function getOrdinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
   return s[(v - 20) % 10] || s[v] || s[0];
+}
+
+/* ── Live Tab Sub-components (A-30 remediation) ──────────── */
+function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!employeeId) return;
+    const fetchAttendance = async () => {
+      try {
+        const q = query(collection(db, "attendance"), where("employeeId", "==", employeeId));
+        const snap = await getDocs(q);
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rows.sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
+        setRecords(rows);
+      } catch {
+        setRecords([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAttendance();
+  }, [employeeId]);
+
+  if (loading) {
+    return <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}><Loader2 size={18} className="animate-spin" /> Loading attendance…</div>;
+  }
+
+  if (records.length === 0) {
+    return <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No attendance records found for this employee.</div>;
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table className="table" style={{ width: "100%", textAlign: "left" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "12px 16px" }}>Date</th>
+              <th style={{ padding: "12px 16px" }}>Status</th>
+              <th style={{ padding: "12px 16px" }}>Clock In</th>
+              <th style={{ padding: "12px 16px" }}>Clock Out</th>
+              <th style={{ padding: "12px 16px" }}>Worked Hours</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((r) => {
+              const worked = computeHoursWorked(r.clockIn, r.clockOut, r.breakStart, r.breakEnd);
+              return (
+                <tr key={r.id}>
+                  <td style={{ padding: "12px 16px" }}>{formatDate(r.date)}</td>
+                  <td style={{ padding: "12px 16px" }}>
+                    <span className="badge" style={{
+                      background: r.status === "Present" ? "var(--accent-green-dim)" : r.status === "Late" ? "var(--accent-amber-dim)" : "var(--accent-red-dim)",
+                      color: r.status === "Present" ? "var(--accent-green)" : r.status === "Late" ? "var(--accent-amber)" : "var(--accent-red)",
+                    }}>{r.status}</span>
+                  </td>
+                  <td style={{ padding: "12px 16px" }}>{r.clockIn || "—"}</td>
+                  <td style={{ padding: "12px 16px" }}>{r.clockOut || "—"}</td>
+                  <td style={{ padding: "12px 16px" }}>{worked || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeTasksTab({ emp }: { emp: Emp }) {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const snap = await getDocs(collection(db, "tasks"));
+        const fullName = `${emp.firstName} ${emp.lastName}`.toLowerCase();
+        const rows = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((t: any) => {
+            return (
+              t.assigneeId === emp.uid ||
+              t.assigneeId === emp.employeeId ||
+              t.assignedTo === emp.uid ||
+              t.assignedTo === emp.employeeId ||
+              (t.assigneeName && t.assigneeName.toLowerCase() === fullName)
+            );
+          });
+        setTasks(rows);
+      } catch {
+        setTasks([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTasks();
+  }, [emp]);
+
+  if (loading) {
+    return <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}><Loader2 size={18} className="animate-spin" /> Loading tasks…</div>;
+  }
+
+  if (tasks.length === 0) {
+    return <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No tasks assigned to this employee.</div>;
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table className="table" style={{ width: "100%", textAlign: "left" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "12px 16px" }}>Task</th>
+              <th style={{ padding: "12px 16px" }}>Priority</th>
+              <th style={{ padding: "12px 16px" }}>Status</th>
+              <th style={{ padding: "12px 16px" }}>Deadline</th>
+              <th style={{ padding: "12px 16px" }}>Effort</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tasks.map((t) => (
+              <tr key={t.id}>
+                <td style={{ padding: "12px 16px" }}>
+                  <div style={{ fontWeight: 600 }}>{t.title}</div>
+                  {t.description && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{t.description.slice(0, 50)}...</div>}
+                </td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span className="badge badge-gray">{t.priority || "Medium"}</span>
+                </td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span className="badge" style={{
+                    background: t.status === "completed" ? "var(--accent-green-dim)" : t.status === "in_progress" ? "var(--accent-blue-dim)" : "var(--bg-elevated)",
+                    color: t.status === "completed" ? "var(--accent-green)" : t.status === "in_progress" ? "var(--accent-blue)" : "var(--text-muted)",
+                  }}>
+                    {t.status?.replace("_", " ")}
+                  </span>
+                </td>
+                <td style={{ padding: "12px 16px" }}>{t.deadline ? formatDate(t.deadline) : "—"}</td>
+                <td style={{ padding: "12px 16px" }}>{t.estimatedHours ? `${t.estimatedHours} hrs` : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeLeavesTab({ employeeId, uid }: { employeeId: string; uid?: string }) {
+  const [leaves, setLeaves] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLeaves = async () => {
+      try {
+        const snap = await getDocs(collection(db, "leaveRequests"));
+        const rows = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((l: any) => l.employeeId === employeeId || (uid && l.userId === uid));
+        setLeaves(rows);
+      } catch {
+        setLeaves([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLeaves();
+  }, [employeeId, uid]);
+
+  if (loading) {
+    return <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}><Loader2 size={18} className="animate-spin" /> Loading leaves…</div>;
+  }
+
+  if (leaves.length === 0) {
+    return <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No leave requests found.</div>;
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table className="table" style={{ width: "100%", textAlign: "left" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "12px 16px" }}>Type</th>
+              <th style={{ padding: "12px 16px" }}>Duration</th>
+              <th style={{ padding: "12px 16px" }}>Reason</th>
+              <th style={{ padding: "12px 16px" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leaves.map((l) => (
+              <tr key={l.id}>
+                <td style={{ padding: "12px 16px", fontWeight: 600 }}>{l.leaveType}</td>
+                <td style={{ padding: "12px 16px" }}>{formatDate(l.startDate)} - {formatDate(l.endDate)}</td>
+                <td style={{ padding: "12px 16px", color: "var(--text-secondary)", fontSize: 13 }}>{l.reason || "—"}</td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span className="badge" style={{
+                    background: l.status === "Approved" ? "var(--accent-green-dim)" : l.status === "Rejected" ? "var(--accent-red-dim)" : "var(--accent-amber-dim)",
+                    color: l.status === "Approved" ? "var(--accent-green)" : l.status === "Rejected" ? "var(--accent-red)" : "var(--accent-amber)",
+                  }}>
+                    {l.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EmployeePayrollTab({ employeeId }: { employeeId: string }) {
+  const [payroll, setPayroll] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPayroll = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, "payroll"), where("employeeId", "==", employeeId)));
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setPayroll(rows);
+      } catch {
+        setPayroll([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPayroll();
+  }, [employeeId]);
+
+  if (loading) {
+    return <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}><Loader2 size={18} className="animate-spin" /> Loading payroll…</div>;
+  }
+
+  if (payroll.length === 0) {
+    return <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No payroll records found.</div>;
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table className="table" style={{ width: "100%", textAlign: "left" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "12px 16px" }}>Month</th>
+              <th style={{ padding: "12px 16px" }}>Gross Pay</th>
+              <th style={{ padding: "12px 16px" }}>Deductions</th>
+              <th style={{ padding: "12px 16px" }}>Net Pay</th>
+              <th style={{ padding: "12px 16px" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payroll.map((p) => {
+              const deductions = p.deductions ?? p.totalDeductions ?? ((p.pf || 0) + (p.tax || 0));
+              const net = (p.gross ?? p.salary ?? 0) - deductions;
+              return (
+                <tr key={p.id}>
+                  <td style={{ padding: "12px 16px", fontWeight: 600 }}>{formatPayrollMonth(p.month, p.year)}</td>
+                  <td style={{ padding: "12px 16px" }}>{formatCurrency(p.gross ?? p.salary ?? 0)}</td>
+                  <td style={{ padding: "12px 16px", color: "var(--accent-red)" }}>-{formatCurrency(deductions)}</td>
+                  <td style={{ padding: "12px 16px", fontWeight: 700, color: "var(--accent-green)" }}>{formatCurrency(net)}</td>
+                  <td style={{ padding: "12px 16px" }}>
+                    <span className="badge" style={{
+                      background: p.status === "Paid" ? "var(--accent-green-dim)" : "var(--accent-amber-dim)",
+                      color: p.status === "Paid" ? "var(--accent-green)" : "var(--accent-amber)",
+                    }}>
+                      {p.status}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function EmployeeDocumentsTab({ employeeId }: { employeeId: string }) {
+  const [docs, setDocs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDocs = async () => {
+      try {
+        const snap = await getDocs(collection(db, "documents"));
+        const rows = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((d: any) => d.employeeId === employeeId || d.folderId === "3");
+        setDocs(rows);
+      } catch {
+        setDocs([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDocs();
+  }, [employeeId]);
+
+  if (loading) {
+    return <div style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}><Loader2 size={18} className="animate-spin" /> Loading documents…</div>;
+  }
+
+  if (docs.length === 0) {
+    return <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>No documents associated with this employee.</div>;
+  }
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table className="table" style={{ width: "100%", textAlign: "left" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "12px 16px" }}>Document Name</th>
+              <th style={{ padding: "12px 16px" }}>Category / Type</th>
+              <th style={{ padding: "12px 16px" }}>Date</th>
+              <th style={{ padding: "12px 16px" }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {docs.map((d) => (
+              <tr key={d.id}>
+                <td style={{ padding: "12px 16px", fontWeight: 600 }}>{d.name || d.title}</td>
+                <td style={{ padding: "12px 16px" }}>{d.type || d.folder || "Document"}</td>
+                <td style={{ padding: "12px 16px" }}>{d.date ? formatDate(d.date) : "—"}</td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span className="badge badge-gray">{d.status || "Archived"}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 /* ── Main page ────────────────────────────────────────────── */
@@ -518,6 +878,7 @@ export default function EmployeeProfilePage() {
   if (!emp) return null;
 
   const isActive = emp.status === "Active";
+  const profileComp = emp.profileCompletion ?? calculateProfileCompletion(emp);
 
   return (
     <div className="page-container">
@@ -599,10 +960,10 @@ export default function EmployeeProfilePage() {
             <div style={{ marginTop: 20, textAlign: "left" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 6 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Profile</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-blue)" }}>{emp.profileCompletion || 0}%</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-blue)" }}>{profileComp}%</div>
               </div>
               <div style={{ height: 6, background: "rgba(0,0,0,0.06)", borderRadius: 3, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${emp.profileCompletion || 0}%`, background: "var(--accent-blue)", borderRadius: 3 }} />
+                <div style={{ height: "100%", width: `${profileComp}%`, background: "var(--accent-blue)", borderRadius: 3 }} />
               </div>
             </div>
           </div>
@@ -668,7 +1029,7 @@ export default function EmployeeProfilePage() {
                   ["Designation",     emp.designation],
                   ["Joining Date",    emp.joiningDate ? formatDate(emp.joiningDate) : "—"],
                   ["Monthly Salary",  formatCurrency(emp.salary)],
-                  ["Salary Date",     emp.salaryDate ? formatDate(emp.salaryDate) : "—"],
+                  ["Salary Date",     formatSalaryDateDisplay(emp.salaryDate)],
                 ].map(([l, v]) => (
                   <div key={l} className="card" style={{ padding: "14px 16px" }}>
                     <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.04em" }}>{l}</div>
@@ -680,13 +1041,25 @@ export default function EmployeeProfilePage() {
             </div>
           )}
 
-          {tab !== "Overview" && (
-            <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--text-muted)" }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
-                <ClipboardList size={32} style={{ opacity: 0.4 }} />
+          {tab === "Attendance" && <EmployeeAttendanceTab employeeId={emp.employeeId} />}
+          {tab === "Tasks"      && <EmployeeTasksTab emp={emp} />}
+          {tab === "Leaves"     && <EmployeeLeavesTab employeeId={emp.employeeId} uid={emp.uid} />}
+          {tab === "Payroll"    && <EmployeePayrollTab employeeId={emp.employeeId} />}
+          {tab === "Documents"  && <EmployeeDocumentsTab employeeId={emp.employeeId} />}
+          {tab === "Activity"   && (
+            <div className="card" style={{ padding: 24 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Activity History</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ padding: 12, background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+                  <span style={{ fontWeight: 600 }}>Employee Profile Created:</span> {emp.joiningDate ? formatDate(emp.joiningDate) : "—"}
+                </div>
+                <div style={{ padding: 12, background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+                  <span style={{ fontWeight: 600 }}>Account Status:</span> {emp.status}
+                </div>
+                <div style={{ padding: 12, background: "var(--bg-elevated)", borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+                  <span style={{ fontWeight: 600 }}>Department:</span> {emp.department} · {emp.designation}
+                </div>
               </div>
-              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>{tab}</div>
-              <div style={{ fontSize: 13 }}>Live {tab.toLowerCase()} data loads here from Firestore.</div>
             </div>
           )}
         </div>

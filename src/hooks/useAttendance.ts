@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
-import { parseTimeToMinutes } from "@/lib/utils";
+import { parseTimeToMinutes, computeHoursWorked } from "@/lib/utils";
 import {
   collection, query, where, onSnapshot,
   doc, setDoc, getDoc, serverTimestamp,
@@ -186,14 +186,40 @@ export async function recordClockOut(
   const timeStr = now.toTimeString().slice(0, 5);
   const docId = `${employeeId}_${dateStr}`;
 
-  // Compute hours worked
-  let hoursWorked = "—";
-  if (clockInTime) {
-    const inMins = parseTimeToMinutes(clockInTime);
-    const outMins = parseTimeToMinutes(timeStr);
-    if (inMins !== null && outMins !== null && outMins > inMins) {
-      const diff = outMins - inMins;
-      hoursWorked = `${Math.floor(diff / 60)}h ${diff % 60}m`;
+  // Read existing doc to fetch break timings and existing status
+  let breakStart = "";
+  let breakEnd = "";
+  let currentStatus: AttendanceRecord["status"] = "Present";
+  try {
+    const existingSnap = await getDoc(doc(db, "attendance", docId));
+    if (existingSnap.exists()) {
+      const data = existingSnap.data();
+      breakStart = data.breakStart || "";
+      breakEnd = data.breakEnd || "";
+      if (data.status) currentStatus = data.status;
+    }
+  } catch {
+    // proceed with defaults
+  }
+
+  // Compute hours worked with break deducted
+  const hoursWorked = computeHoursWorked(clockInTime, timeStr, breakStart, breakEnd);
+
+  // Check short day (< 4 hours worked)
+  let updatedStatus = currentStatus;
+  let notes = "";
+  const inMins = parseTimeToMinutes(clockInTime);
+  const outMins = parseTimeToMinutes(timeStr);
+  if (inMins !== null && outMins !== null && outMins > inMins) {
+    let diff = outMins - inMins;
+    if (breakStart && breakEnd) {
+      const bs = parseTimeToMinutes(breakStart);
+      const be = parseTimeToMinutes(breakEnd);
+      if (bs !== null && be !== null && be > bs) diff = Math.max(0, diff - (be - bs));
+    }
+    if (diff < 240) {
+      updatedStatus = "Half Day";
+      notes = "Short day (< 4h worked)";
     }
   }
 
@@ -202,6 +228,8 @@ export async function recordClockOut(
     {
       clockOut: timeStr,
       hoursWorked,
+      status: updatedStatus,
+      ...(notes ? { notes } : {}),
       updatedAt: serverTimestamp(),
     },
     { merge: true }

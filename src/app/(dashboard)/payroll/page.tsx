@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Download, Plus, FileText, CheckCircle2, X, Loader2, DollarSign } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatPayrollMonth } from "@/lib/utils";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
@@ -184,31 +184,70 @@ export default function PayrollPage() {
   /* ── Admin: load payroll records ── */
   useEffect(() => {
     if (!isAdmin) return;
+
+    // Cache employee info to populate missing names/depts
+    const empMap = new Map<string, { name: string; dept: string }>();
+    const unsubEmp = onSnapshot(collection(db, "employees"), (empSnap) => {
+      empSnap.docs.forEach((d) => {
+        const emp = d.data();
+        const empId = emp.employeeId || d.id;
+        const name = `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name || emp.displayName;
+        const dept = emp.department || "";
+        if (empId) empMap.set(empId, { name, dept });
+      });
+    });
+
     const q = query(collection(db, "payroll"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const rows: EmpPayroll[] = snap.docs.map((d) => {
         const data = d.data();
+        const empId = data.employeeId ?? "";
+        const empFallback = empMap.get(empId);
+
+        const basic = Number(data.basic ?? 0);
+        const allowances = Number(data.allowances ?? 0);
+        const bonus = Number(data.bonus ?? 0);
+        const gross = basic + allowances + bonus;
+
+        const pf = Number(data.pf ?? 0);
+        const tax = Number(data.tax ?? 0);
+        const rawDeductions = data.deductions ?? data.totalDeductions;
+        const deductions = rawDeductions !== undefined && rawDeductions !== null ? Number(rawDeductions) : (pf + tax);
+        const net = data.net !== undefined && data.net !== null ? Number(data.net) : (gross - deductions);
+
+        const resolvedName = (data.employeeName && data.employeeName !== "Unknown")
+          ? data.employeeName
+          : (empFallback?.name || "Employee");
+
+        const resolvedDept = (data.department && data.department !== "—")
+          ? data.department
+          : (empFallback?.dept || "General");
+
         return {
           id:          d.id,
-          name:        data.employeeName  ?? "Unknown",
-          dept:        data.department    ?? "—",
-          salary:      data.basic         ?? 0,
+          name:        resolvedName,
+          dept:        resolvedDept,
+          salary:      basic,
           status:      data.status        ?? "Draft",
-          month:       data.month         ?? "—",
-          basic:       data.basic         ?? 0,
-          allowances:  data.allowances    ?? 0,
-          bonus:       data.bonus         ?? 0,
-          pf:          data.pf            ?? 0,
-          tax:         data.tax           ?? 0,
-          deductions:  data.deductions    ?? 0,
-          net:         data.net           ?? 0,
-          employeeId:  data.employeeId    ?? "",
+          month:       formatPayrollMonth(data.month, data.year),
+          basic,
+          allowances,
+          bonus,
+          pf,
+          tax,
+          deductions,
+          net,
+          employeeId:  empId,
         };
       });
       setAdminPayroll(rows);
       setAdminLoading(false);
     }, () => setAdminLoading(false));
-    return () => unsub();
+
+    return () => {
+      unsub();
+      unsubEmp();
+    };
   }, [isAdmin]);
 
   /* ── Employee: load own payslips from payroll collection ── */
@@ -221,18 +260,31 @@ export default function PayrollPage() {
     const unsub = onSnapshot(q, (snap) => {
       const rows: (Payslip & { rawCreatedAt?: any })[] = snap.docs.map((d) => {
         const data = d.data();
+        const basic = Number(data.basic ?? 0);
+        const allowances = Number(data.allowances ?? 0);
+        const bonus = Number(data.bonus ?? 0);
+        const gross = basic + allowances + bonus;
+
+        const pf = Number(data.pf ?? 0);
+        const tax = Number(data.tax ?? 0);
+        const rawDeductions = data.deductions ?? data.totalDeductions;
+        const deductions = rawDeductions !== undefined && rawDeductions !== null ? Number(rawDeductions) : (pf + tax);
+        const net = data.net !== undefined && data.net !== null ? Number(data.net) : (gross - deductions);
+
         return {
-          id:         d.id,
-          month:      data.month       ?? "—",
-          basic:      data.basic       ?? 0,
-          allowances: data.allowances  ?? 0,
-          bonus:      data.bonus       ?? 0,
-          pf:         data.pf          ?? 0,
-          tax:        data.tax         ?? 0,
-          deductions: data.deductions  ?? 0,
-          net:        data.net         ?? 0,
-          status:     data.status      ?? "Generated",
-          employeeId: data.employeeId  ?? "",
+          id:           d.id,
+          month:        formatPayrollMonth(data.month, data.year),
+          basic,
+          allowances,
+          bonus,
+          pf,
+          tax,
+          deductions,
+          net,
+          status:       data.status      ?? "Generated",
+          employeeId:   data.employeeId  ?? "",
+          employeeName: data.employeeName || profile?.displayName || "Employee",
+          department:   data.department || profile?.department || "General",
           rawCreatedAt: data.createdAt,
         };
       });
@@ -245,7 +297,7 @@ export default function PayrollPage() {
       setEmpLoading(false);
     }, () => setEmpLoading(false));
     return () => unsub();
-  }, [isAdmin, profile?.employeeId]);
+  }, [isAdmin, profile?.employeeId, profile?.displayName, profile?.department]);
 
   /* ── Generate payroll for ALL active employees (admin) ── */
   const handleGenerate = async () => {
@@ -285,11 +337,13 @@ export default function PayrollPage() {
         const tax         = 0;
         const deductions  = 0;
         const net         = basic;
+        const empName     = `${emp.firstName ?? ""} ${emp.lastName ?? ""}`.trim() || emp.name || "Employee";
+        const empDept     = emp.department ?? "General";
 
         const payload = {
           employeeId:   empId,
-          employeeName: `${emp.firstName ?? ""} ${emp.lastName ?? ""}`.trim(),
-          department:   emp.department    ?? "",
+          employeeName: empName,
+          department:   empDept,
           month:        monthLabel,
           basic, allowances, bonus, pf, tax, deductions, net,
           status:       "Generated",
@@ -303,6 +357,25 @@ export default function PayrollPage() {
         } else {
           await addDoc(collection(db, "payroll"), payload);
         }
+
+        // Auto-create document in Documents collection under Payslips (folderId: "3")
+        const docDocId = `payslip_${empId}_${now.getFullYear()}_${now.getMonth() + 1}`;
+        await setDoc(doc(db, "documents", docDocId), {
+          name: `Payslip - ${empName} - ${monthLabel}.pdf`,
+          type: "pdf",
+          size: 45200,
+          uploader: profile?.displayName || "Admin",
+          date: new Date().toISOString().split("T")[0],
+          dept: empDept,
+          tags: ["payroll", "payslip", monthLabel.toLowerCase().replace(" ", "-")],
+          folderId: "3",
+          pinned: false,
+          favorite: false,
+          companyId: profile?.companyId ?? "default",
+          employeeId: empId,
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+
         generated++;
       }
 
@@ -321,9 +394,9 @@ export default function PayrollPage() {
 
   /* ── Stats ── */
   const totalPayroll   = adminPayroll.reduce((s, e) => s + e.net, 0);
-  const generatedCount = adminPayroll.filter((e) => e.status === "Generated").length;
+  const generatedCount = adminPayroll.length;
   const paidCount      = adminPayroll.filter((e) => e.status === "Paid").length;
-  const pendingCount   = adminPayroll.filter((e) => e.status === "Draft" || e.status === "Generated").length;
+  const pendingCount   = adminPayroll.filter((e) => e.status !== "Paid").length;
 
   const selectedSlip = myPayslips.find((p) => p.id === selectedId) ?? myPayslips[0];
 
@@ -352,7 +425,7 @@ export default function PayrollPage() {
             {[
               { label: "Total Payroll", value: formatCurrency(totalPayroll), sub: "this cycle",      color: "var(--accent-purple)" },
               { label: "Generated",     value: String(generatedCount),       sub: "payslips",        color: "var(--accent-blue)"   },
-              { label: "Paid",          value: String(paidCount),            sub: "employees",       color: "var(--accent-green)"  },
+              { label: "Paid",          value: String(paidCount),            sub: `of ${generatedCount} payslips`, color: "var(--accent-green)"  },
               { label: "Pending",       value: String(pendingCount),         sub: "to disburse",     color: "var(--accent-amber)"  },
             ].map((s) => (
               <div key={s.label} className="card" style={{ padding: "14px 18px" }}>
@@ -470,8 +543,8 @@ export default function PayrollPage() {
                     </div>
                     <button id="payslip-download" className="btn btn-secondary" style={{ gap: 6 }} onClick={() => {
                       openPrintWindow(buildPayslipHtml({
-                        name: profile?.displayName ?? "Employee",
-                        dept: "Your Department",
+                        name: selectedSlip.employeeName || profile?.displayName || "Employee",
+                        dept: selectedSlip.department || profile?.department || "General",
                         ...selectedSlip,
                       }));
                       toast.success("Payslip opened for download!");

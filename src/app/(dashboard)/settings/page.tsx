@@ -131,7 +131,12 @@ function CategoriesContent() {
 
 /* ─── Company Settings ─── */
 type CompanyData = { name:string; email:string; phone:string; address:string };
-const COMPANY_DEFAULTS: CompanyData = { name:"", email:"", phone:"", address:"" };
+const COMPANY_DEFAULTS: CompanyData = {
+  name: "MakeWithUs Pvt Ltd",
+  email: "contact@makewithus.in",
+  phone: "+91 98765 43210",
+  address: "Tech Park, Outer Ring Road, Bangalore, Karnataka - 560103",
+};
 
 function CompanySettingsContent({ isAdmin }: { isAdmin: boolean }) {
   const [data, setData] = useState<CompanyData>(COMPANY_DEFAULTS);
@@ -298,11 +303,11 @@ function PersonalInfoContent() {
     if (!empDocId) { toast.error("Employee record not found. Please refresh."); return; }
 
     // ── Field validation ──────────────────────────────────────
-    if (phone && !/^[0-9+\-\s]{7,15}$/.test(phone.trim())) {
-      toast.error("Phone number must be 7–15 digits (numbers only)."); return;
+    if (phone && !/^[\d\s+\-()]{7,20}$/.test(phone.trim())) {
+      toast.error("Phone number must be a valid format (7–20 characters)."); return;
     }
-    if (ecPhone && !/^[0-9+\-\s]{7,15}$/.test(ecPhone.trim())) {
-      toast.error("Emergency contact phone must be 7–15 digits."); return;
+    if (ecPhone && !/^[\d\s+\-()]{7,20}$/.test(ecPhone.trim())) {
+      toast.error("Emergency contact phone must be a valid format (7–20 characters)."); return;
     }
     if (ecName && !/^[a-zA-Z\s.'-]{2,50}$/.test(ecName.trim())) {
       toast.error("Contact name must be 2–50 letters only."); return;
@@ -393,16 +398,15 @@ function PersonalInfoContent() {
             <div>
               <h3 style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-secondary)", marginBottom: 12 }}>Contact</h3>
               <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Phone Number</label>
-              <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Numbers only, 7–15 digits</p>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Valid phone format (e.g. +91 98765 43210, 7–20 characters)</p>
               <input
                 className="input-base"
                 type="tel"
                 value={phone}
-                inputMode="numeric"
-                maxLength={15}
-                placeholder="eg. 9876543210"
+                maxLength={20}
+                placeholder="eg. +91 98765 43210"
                 style={{ width: "100%", marginBottom: 12 }}
-                onChange={(e) => setPhone(e.target.value.replace(/[^0-9+\-\s]/g, "").slice(0, 15))}
+                onChange={(e) => setPhone(e.target.value.replace(/[^\d\s+\-()]/g, "").slice(0, 20))}
               />
               <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Address</label>
               <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Your full residential address</p>
@@ -441,13 +445,12 @@ function PersonalInfoContent() {
               </div>
               <div>
                 <label style={{ fontSize: 13, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Phone Number</label>
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Numbers only, 7–15 digits</p>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Valid phone format (e.g. +91 98765 43210, 7–20 characters)</p>
                 <input
                   className="input-base" type="tel" value={ecPhone}
-                  inputMode="numeric"
-                  maxLength={15}
-                  placeholder="eg. 9876543210"
-                  onChange={(e) => setEcPhone(e.target.value.replace(/[^0-9+\-\s]/g, "").slice(0, 15))}
+                  maxLength={20}
+                  placeholder="eg. +91 98765 43210"
+                  onChange={(e) => setEcPhone(e.target.value.replace(/[^\d\s+\-()]/g, "").slice(0, 20))}
                   style={{ width: "100%" }}
                 />
               </div>
@@ -485,7 +488,7 @@ export default function SettingsPage() {
 
   const allTabs = [
     { id:"personal",    label:"Personal Info",        icon:User,         show:true },
-    { id:"company",     label:"Company Settings",     icon:Building2,    show:true },
+    { id:"company",     label:"Company Settings",     icon:Building2,    show:isAdmin },
     { id:"categories",  label:"Department Categories",icon:Tags,         show:isAdmin },
     { id:"permissions", label:"Permissions & Roles",  icon:Shield,       show:isAdmin },
     { id:"leavePolicy", label:"Leave Policy",         icon:CalendarDays, show:isAdmin },

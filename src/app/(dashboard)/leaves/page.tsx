@@ -15,9 +15,12 @@ import {
 
 const schema = z.object({
   leaveType: z.string().min(1, "Select a leave type"),
-  startDate: z.string().min(1, "Required"),
-  endDate:   z.string().min(1, "Required"),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate:   z.string().min(1, "End date is required"),
   reason:    z.string().min(1, "Please provide a reason"),
+}).refine((d) => new Date(d.endDate) >= new Date(d.startDate), {
+  message: "End date cannot be earlier than start date",
+  path: ["endDate"],
 });
 type FormData = z.infer<typeof schema>;
 
@@ -44,6 +47,7 @@ type LeaveRow = {
   days: number;
   status: string;
   dept: string;
+  reason?: string;
   employeeId?: string;
 };
 
@@ -90,6 +94,7 @@ export default function LeavesPage() {
               days:       data.days        ?? 1,
               status:     data.status      ?? "Pending",
               dept:       data.department  ?? "",
+              reason:     data.reason      ?? "",
               employeeId: data.employeeId  ?? "",
               rawCreatedAt: data.createdAt,
             } as any;
@@ -118,7 +123,14 @@ export default function LeavesPage() {
 
   /* ── Submit leave (employee) — writes to Firestore ── */
   const onSubmit = async (data: FormData) => {
-    const diffTime = Math.abs(new Date(data.endDate).getTime() - new Date(data.startDate).getTime());
+    if (new Date(data.endDate) < new Date(data.startDate)) {
+      toast.error("End date cannot be earlier than start date");
+      return;
+    }
+
+    const startMs = new Date(data.startDate).getTime();
+    const endMs = new Date(data.endDate).getTime();
+    const diffTime = endMs - startMs;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
     try {
@@ -134,11 +146,40 @@ export default function LeavesPage() {
         createdAt:    serverTimestamp(),
         updatedAt:    serverTimestamp(),
       });
+
+      // Dispatch notification to admins (fixes A-39)
+      await addDoc(collection(db, "notifications"), {
+        companyId: profile?.companyId ?? "default",
+        userId: "admin",
+        targetRole: "admin",
+        title: "New Leave Request Submitted",
+        message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
+        type: "leave",
+        isRead: false,
+        link: "/leaves",
+        createdAt: serverTimestamp(),
+      }).catch(() => {});
+
       toast.success("Leave request submitted successfully!");
       reset();
       setShowForm(false);
     } catch {
       toast.error("Failed to submit leave request. Please try again.");
+    }
+  };
+
+  /* ── Cancel leave request (employee) ── */
+  const handleCancelLeave = async (id: string) => {
+    try {
+      const { doc: fsDoc } = await import("firebase/firestore");
+      await updateDoc(fsDoc(db, "leaveRequests", id), {
+        status: "Cancelled",
+        cancelledAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      toast.success("Leave request cancelled successfully.");
+    } catch {
+      toast.error("Failed to cancel leave request.");
     }
   };
 
@@ -317,12 +358,26 @@ export default function LeavesPage() {
                   <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
                     {r.type} · {r.start} – {r.end} · {r.days} day{r.days > 1 ? "s" : ""}
                   </div>
+                  {r.reason && (
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                      <span style={{ color: "var(--text-muted)" }}>Reason:</span> {r.reason}
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <span className="badge" style={{ background: STATUS_BG[r.status] ?? "rgba(255,255,255,0.06)", color: STATUS_COLOR[r.status] ?? "var(--text-muted)" }}>
                   {r.status}
                 </span>
+                {!isAdmin && r.status === "Pending" && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: "5px 10px", fontSize: 12, gap: 4, color: "var(--accent-red)" }}
+                    onClick={() => handleCancelLeave(r.id)}
+                  >
+                    <X size={12} /> Cancel Request
+                  </button>
+                )}
                 {isAdmin && r.status === "Pending" && (
                   <div style={{ display: "flex", gap: 6 }}>
                     <button className="btn btn-primary" style={{ padding: "5px 10px", fontSize: 12, gap: 4 }} onClick={() => handleAction(r.id, "Approved")}><Check size={12} /> Approve</button>

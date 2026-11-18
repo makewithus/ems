@@ -36,20 +36,16 @@ service cloud.firestore {
     }
 
     // ── /users ───────────────────────────────────────────────────────────
-    // SECURITY FIX [C1]: Removed blanket `allow create: if isSignedIn()`
-    // which allowed ANY authenticated user to create user profiles with
-    // arbitrary roles (e.g., super_admin). Now only:
-    //   - Super admins can do anything
-    //   - Users can read/update their own profile
-    //   - HR admins can create new employee profiles
-    //   - Users can create ONLY their own profile doc (self-registration)
+    // Allow all signed-in users to read directory/user profiles (needed for
+    // team performance, assigning tasks, and employee actions notifying admins).
+    // Employees cannot alter their role.
     match /users/{userId} {
-      allow read, write: if isSuperAdmin();
-      allow read, update: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isHRAdmin();
-      // User can create their own profile doc only (covers admin first-login
-      // and secondary-app employee creation where the new user's UID == userId)
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow read: if isSignedIn();
+      allow write, delete: if isSuperAdmin();
+      allow create: if isHRAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow update: if isHRAdmin()
+        || (isSignedIn() && request.auth.uid == userId
+            && request.resource.data.get('role', null) == resource.data.get('role', null));
     }
 
     // ── /companies ───────────────────────────────────────────────────────

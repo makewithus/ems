@@ -22,9 +22,11 @@ import {
   ShieldCheck,
   RotateCcw,
   Search,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
-import { formatDate, formatDateTime, timeAgo, TASK_STATUS, TASK_PRIORITIES } from "@/lib/utils";
+import { formatDate, formatDateTime, timeAgo, TASK_STATUS, TASK_PRIORITIES, isValidUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
@@ -35,6 +37,7 @@ import {
   orderBy,
   doc,
   updateDoc,
+  deleteDoc,
   serverTimestamp,
   where,
   getDocs,
@@ -42,6 +45,7 @@ import {
 import { Task, TaskPriority, TaskStatus, TaskActivityLog, Role } from "@/types";
 import {
   transitionTaskStatus,
+  logTaskActivity,
   isTaskCompleted,
   isTaskUnderReview,
   isTaskInProgress,
@@ -120,13 +124,30 @@ export default function TasksPage() {
   const [timelineTask, setTimelineTask] = useState<Task | null>(null);
   const [taskAuditLogs, setTaskAuditLogs] = useState<TaskActivityLog[]>([]);
 
+  // Task Management (Edit / Reassign / Delete)
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    title: "",
+    desc: "",
+    assigneeId: "",
+    assigneeName: "",
+    priority: "Medium" as TaskPriority,
+    startDate: "",
+    deadline: "",
+    estimatedHours: 8,
+  });
+  const [deletingTask, setDeletingTask] = useState<Task | null>(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [formErrors, setFormErrors] = useState<{ title?: string; assignee?: string; deadline?: string; estimatedHours?: string }>({});
+
   /* ── Drag State ── */
   const dragId = useRef<string | null>(null);
   const dragTarget = useRef<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
 
-  /* ── Load Employees for Assignment ── */
+  /* ── Load Employees for Assignment (Deduplicated) ── */
   useEffect(() => {
     if (!isAdmin) {
       if (user?.uid) {
@@ -141,25 +162,32 @@ export default function TasksPage() {
       return;
     }
 
-    const q = query(collection(db, "users"), where("role", "==", "employee"));
+    // Query authoritative employees collection
+    const qEmp = query(collection(db, "employees"));
     const unsub = onSnapshot(
-      q,
+      qEmp,
       (snap) => {
-        const empList = snap.docs
-          .map((d) => ({
-            uid: d.id,
-            name: d.data().displayName ?? d.data().email ?? d.id,
-            employeeId: d.data().employeeId ?? d.id,
-          }))
-          .filter((e) => e.name);
+        const seenEmpIds = new Set<string>();
+        const seenNames = new Set<string>();
+        const empList: EmpOption[] = [];
 
-        if (user?.uid && !empList.some((e) => e.uid === user.uid)) {
+        snap.docs.forEach((d) => {
+          const data = d.data();
+          if (data.status === "Archived") return;
+          const empId = data.employeeId || d.id;
+          const name = `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.name || data.email || empId;
+          const normName = name.toLowerCase().replace(/\s+/g, " ");
+
+          if (seenEmpIds.has(empId) || (normName && seenNames.has(normName))) return;
+          seenEmpIds.add(empId);
+          if (normName) seenNames.add(normName);
+
           empList.push({
-            uid: user.uid,
-            name: profile?.displayName || user.displayName || user.email || "Me",
-            employeeId: (profile as { employeeId?: string })?.employeeId || "Current User",
+            uid: data.uid || d.id,
+            name,
+            employeeId: empId,
           });
-        }
+        });
 
         empList.sort((a, b) => a.name.localeCompare(b.name));
         setEmployees(empList);
@@ -294,10 +322,35 @@ export default function TasksPage() {
       q,
       (snap) => {
         const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as TaskActivityLog[];
-        logs.sort((a, b) => {
-          const aTime = a.timestamp?.toMillis?.() || (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : 0);
-          const bTime = b.timestamp?.toMillis?.() || (b.timestamp?.seconds ? b.timestamp.seconds * 1000 : 0);
-          return bTime - aTime;
+        const getLogTime = (log: any) => {
+          if (!log.timestamp && !log.createdAt) return 0;
+          const ts = log.timestamp || log.createdAt;
+          if (typeof ts?.toMillis === "function") return ts.toMillis();
+          if (typeof ts?.toDate === "function") return ts.toDate().getTime();
+          if (ts?.seconds) return ts.seconds * 1000;
+          const d = new Date(ts);
+          return isNaN(d.getTime()) ? 0 : d.getTime();
+        };
+        const actionPriority: Record<string, number> = {
+          CREATED: 1,
+          STARTED: 2,
+          STATUS_CHANGE: 3,
+          SUBMITTED: 4,
+          MODIFICATION_REQUESTED: 5,
+          REJECTED: 5,
+          APPROVED: 6,
+          ADMIN_OVERRIDE: 7,
+          REOPENED: 8,
+          DELETED: 9,
+        };
+        // Sort chronologically (oldest event to newest) with secondary sort on action lifecycle
+        logs.sort((a: any, b: any) => {
+          const timeA = getLogTime(a);
+          const timeB = getLogTime(b);
+          if (timeA !== timeB) return timeA - timeB;
+          const rankA = actionPriority[a.action] || 5;
+          const rankB = actionPriority[b.action] || 5;
+          return rankA - rankB;
         });
         setTaskAuditLogs(logs);
       },
@@ -362,6 +415,12 @@ export default function TasksPage() {
   /* ── Employee Submits Work for Review ── */
   const handleConfirmSubmission = async () => {
     if (!submitTaskTarget) return;
+
+    if (submissionProofURL.trim() && !isValidUrl(submissionProofURL.trim())) {
+      toast.error("Please provide a valid proof URL starting with http:// or https://");
+      return;
+    }
+
     setSubmittingWork(true);
 
     try {
@@ -447,16 +506,29 @@ export default function TasksPage() {
 
   /* ── Create Task ── */
   const addTask = async () => {
+    const errs: { title?: string; assignee?: string; deadline?: string; estimatedHours?: string } = {};
+
     if (!newTask.title.trim()) {
-      toast.error("Task title is required");
-      return;
+      errs.title = "Task title is required";
     }
     if (!newTask.assigneeId) {
-      toast.error("Please select an assignee");
-      return;
+      errs.assignee = "Please select an assignee";
     }
     if (!newTask.deadline) {
-      toast.error("Please set a completion deadline");
+      errs.deadline = "Please set a completion deadline";
+    } else if (newTask.startDate && new Date(newTask.deadline) < new Date(newTask.startDate)) {
+      errs.deadline = "Deadline cannot be earlier than start date";
+    }
+
+    if (isNaN(Number(newTask.estimatedHours)) || Number(newTask.estimatedHours) < 0) {
+      errs.estimatedHours = "Estimated effort cannot be negative";
+    }
+
+    setFormErrors(errs);
+
+    if (Object.keys(errs).length > 0) {
+      const firstError = Object.values(errs)[0];
+      toast.error(firstError);
       return;
     }
 
@@ -473,7 +545,7 @@ export default function TasksPage() {
         startDate: newTask.startDate,
         deadline: newTask.deadline,
         priority: newTask.priority,
-        estimatedHours: Number(newTask.estimatedHours) || 0,
+        estimatedHours: Math.max(0, Number(newTask.estimatedHours) || 0),
         status: "Pending",
         progress: 0,
         assigneeId: newTask.assigneeId,
@@ -528,11 +600,128 @@ export default function TasksPage() {
         assigneeId: "",
         assigneeName: "",
       });
+      setFormErrors({});
       setShowForm(false);
     } catch {
       toast.error("Failed to create task");
     } finally {
       setSaving(false);
+    }
+  };
+
+  /* ── Admin Edit Task ── */
+  const handleOpenEditModal = (task: Task) => {
+    setEditingTask(task);
+    setEditFormData({
+      title: task.title,
+      desc: task.desc || "",
+      assigneeId: task.assigneeId || task.assignedTo || "",
+      assigneeName: task.assigneeName || "",
+      priority: task.priority || "Medium",
+      startDate: task.startDate || "",
+      deadline: task.deadline || "",
+      estimatedHours: task.estimatedHours || 0,
+    });
+  };
+
+  const handleSaveEditTask = async () => {
+    if (!editingTask) return;
+
+    if (!editFormData.title.trim()) {
+      toast.error("Task title is required");
+      return;
+    }
+    if (editFormData.startDate && editFormData.deadline && new Date(editFormData.deadline) < new Date(editFormData.startDate)) {
+      toast.error("Deadline cannot be earlier than start date");
+      return;
+    }
+    if (Number(editFormData.estimatedHours) < 0) {
+      toast.error("Estimated effort cannot be negative");
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      const isReassigned = editFormData.assigneeId !== editingTask.assigneeId;
+      const updates: Record<string, any> = {
+        title: editFormData.title.trim(),
+        desc: editFormData.desc.trim(),
+        description: editFormData.desc.trim(),
+        assigneeId: editFormData.assigneeId,
+        assigneeName: editFormData.assigneeName,
+        assignedTo: editFormData.assigneeId,
+        assignedToName: editFormData.assigneeName,
+        priority: editFormData.priority,
+        startDate: editFormData.startDate,
+        deadline: editFormData.deadline,
+        estimatedHours: Math.max(0, Number(editFormData.estimatedHours) || 0),
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(doc(db, "tasks", editingTask.id), updates);
+
+      // Audit log
+      await logTaskActivity({
+        taskId: editingTask.id,
+        taskTitle: editFormData.title.trim(),
+        companyId: editingTask.companyId,
+        actorId: user?.uid || "admin",
+        actorName: profile?.displayName || "Admin",
+        actorRole: role || "super_admin",
+        action: isReassigned ? "REASSIGNED" : ("STATUS_CHANGE" as any),
+        comment: isReassigned
+          ? `Task reassigned to ${editFormData.assigneeName}`
+          : "Task details updated by Administrator",
+      });
+
+      if (isReassigned && editFormData.assigneeId) {
+        await addDoc(collection(db, "notifications"), {
+          companyId: editingTask.companyId || "default",
+          userId: editFormData.assigneeId,
+          title: "Task Reassigned to You",
+          message: `Admin reassigned task "${editFormData.title.trim()}" to you`,
+          type: "task",
+          isRead: false,
+          link: "/tasks",
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+      }
+
+      toast.success("Task updated successfully!");
+      setEditingTask(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update task");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  /* ── Admin Delete Task ── */
+  const handleDeleteTask = async () => {
+    if (!deletingTask) return;
+    setDeletingLoading(true);
+    try {
+      await deleteDoc(doc(db, "tasks", deletingTask.id));
+
+      await addDoc(collection(db, "auditLogs"), {
+        timestamp: new Date().toISOString(),
+        actorId: user?.uid || "admin",
+        actorName: profile?.displayName || "Admin",
+        actorRole: role || "super_admin",
+        action: "DELETED",
+        entityType: "TASK",
+        entityId: deletingTask.id,
+        description: `Admin deleted task "${deletingTask.title}"`,
+        module: "EMS_TASKS",
+        createdAt: serverTimestamp(),
+      });
+
+      toast.success("Task deleted successfully!");
+      setDeletingTask(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete task");
+    } finally {
+      setDeletingLoading(false);
     }
   };
 
@@ -607,7 +796,7 @@ export default function TasksPage() {
   return (
     <div className="page-container" style={{ maxWidth: 1400, margin: "0 auto", paddingBottom: 64 }}>
       {/* Header & Tabs */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 14 }}>
         <div>
           <h1 className="page-title" style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.03em" }}>
             Task Management
@@ -619,7 +808,7 @@ export default function TasksPage() {
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           {/* View toggle (Kanban vs List) */}
           <div style={{ display: "flex", background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)", padding: 3, gap: 2 }}>
             {(["kanban", "list"] as const).map((v) => (
@@ -978,12 +1167,34 @@ export default function TasksPage() {
                           {/* History / Timeline Icon */}
                           <button
                             className="btn btn-ghost"
-                            style={{ padding: "4px 6px", marginLeft: "auto" }}
+                            style={{ padding: "4px 6px" }}
                             title="View Activity History"
                             onClick={() => setTimelineTask(t)}
                           >
                             <History size={13} color="var(--text-muted)" />
                           </button>
+
+                          {/* Admin Edit & Delete buttons */}
+                          {isAdmin && (
+                            <>
+                              <button
+                                className="btn btn-ghost"
+                                style={{ padding: "4px 6px" }}
+                                title="Edit Task"
+                                onClick={() => handleOpenEditModal(t)}
+                              >
+                                <Pencil size={13} color="var(--text-muted)" />
+                              </button>
+                              <button
+                                className="btn btn-ghost"
+                                style={{ padding: "4px 6px" }}
+                                title="Delete Task"
+                                onClick={() => setDeletingTask(t)}
+                              >
+                                <Trash2 size={13} color="var(--accent-red)" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );
@@ -1079,10 +1290,31 @@ export default function TasksPage() {
                         <button
                           className="btn btn-ghost"
                           style={{ padding: "4px 6px" }}
+                          title="View Activity History"
                           onClick={() => setTimelineTask(t)}
                         >
                           <History size={13} />
                         </button>
+                        {isAdmin && (
+                          <>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: "4px 6px" }}
+                              title="Edit Task"
+                              onClick={() => handleOpenEditModal(t)}
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: "4px 6px" }}
+                              title="Delete Task"
+                              onClick={() => setDeletingTask(t)}
+                            >
+                              <Trash2 size={13} color="var(--accent-red)" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1244,15 +1476,22 @@ export default function TasksPage() {
                 </span>
                 {reviewModalTask.submissionNotes}
                 {reviewModalTask.proofURL && (
-                  <div style={{ marginTop: 4 }}>
-                    <a
-                      href={reviewModalTask.proofURL}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "var(--accent-blue)", textDecoration: "underline" }}
-                    >
-                      View Attached Work Proof
-                    </a>
+                  <div style={{ marginTop: 6, fontSize: 12 }}>
+                    <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>Work Proof URL: </span>
+                    {isValidUrl(reviewModalTask.proofURL) ? (
+                      <a
+                        href={reviewModalTask.proofURL}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "var(--accent-blue)", textDecoration: "underline", wordBreak: "break-all" }}
+                      >
+                        {reviewModalTask.proofURL}
+                      </a>
+                    ) : (
+                      <span style={{ color: "var(--accent-red)", fontWeight: 500 }}>
+                        Invalid URL provided: {reviewModalTask.proofURL}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1452,7 +1691,7 @@ export default function TasksPage() {
         >
           <div
             className="card"
-            style={{ padding: 32, width: 500, background: "var(--bg-primary)", maxHeight: "90vh", overflowY: "auto" }}
+            style={{ padding: 32, width: 500, maxWidth: "95vw", background: "var(--bg-primary)", maxHeight: "90vh", overflowY: "auto" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
@@ -1473,8 +1712,17 @@ export default function TasksPage() {
                   className="input-base"
                   placeholder="e.g. Update employee handbook"
                   value={newTask.title}
-                  onChange={(e) => setNewTask((p) => ({ ...p, title: e.target.value }))}
+                  onChange={(e) => {
+                    setNewTask((p) => ({ ...p, title: e.target.value }));
+                    if (formErrors.title) setFormErrors((err) => ({ ...err, title: undefined }));
+                  }}
+                  style={{ borderColor: formErrors.title ? "var(--accent-red)" : undefined }}
                 />
+                {formErrors.title && (
+                  <span style={{ color: "var(--accent-red)", fontSize: 11, marginTop: 4, display: "block" }}>
+                    {formErrors.title}
+                  </span>
+                )}
               </div>
 
               {/* Assignee picker */}
@@ -1486,7 +1734,7 @@ export default function TasksPage() {
                   <select
                     id="task-assignee"
                     className="input-base"
-                    style={{ appearance: "none", paddingRight: 32 }}
+                    style={{ appearance: "none", paddingRight: 32, borderColor: formErrors.assignee ? "var(--accent-red)" : undefined }}
                     value={newTask.assigneeId}
                     onChange={(e) => {
                       const emp = employees.find((em) => em.uid === e.target.value);
@@ -1495,6 +1743,7 @@ export default function TasksPage() {
                         assigneeId: e.target.value,
                         assigneeName: emp?.name ?? "",
                       }));
+                      if (formErrors.assignee) setFormErrors((err) => ({ ...err, assignee: undefined }));
                     }}
                   >
                     <option value="">— Select Employee —</option>
@@ -1506,6 +1755,11 @@ export default function TasksPage() {
                   </select>
                   <ChevronDown size={14} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--text-muted)" }} />
                 </div>
+                {formErrors.assignee && (
+                  <span style={{ color: "var(--accent-red)", fontSize: 11, marginTop: 4, display: "block" }}>
+                    {formErrors.assignee}
+                  </span>
+                )}
               </div>
 
               {/* Description */}
@@ -1545,8 +1799,17 @@ export default function TasksPage() {
                     type="date"
                     className="input-base"
                     value={newTask.deadline}
-                    onChange={(e) => setNewTask((p) => ({ ...p, deadline: e.target.value }))}
+                    onChange={(e) => {
+                      setNewTask((p) => ({ ...p, deadline: e.target.value }));
+                      if (formErrors.deadline) setFormErrors((err) => ({ ...err, deadline: undefined }));
+                    }}
+                    style={{ borderColor: formErrors.deadline ? "var(--accent-red)" : undefined }}
                   />
+                  {formErrors.deadline && (
+                    <span style={{ color: "var(--accent-red)", fontSize: 11, marginTop: 4, display: "block" }}>
+                      {formErrors.deadline}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -1579,11 +1842,25 @@ export default function TasksPage() {
                   </label>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     className="input-base"
                     value={newTask.estimatedHours}
-                    onChange={(e) => setNewTask((p) => ({ ...p, estimatedHours: Number(e.target.value) }))}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setNewTask((p) => ({ ...p, estimatedHours: val }));
+                      if (val < 0) {
+                        setFormErrors((err) => ({ ...err, estimatedHours: "Estimated effort cannot be negative" }));
+                      } else {
+                        setFormErrors((err) => ({ ...err, estimatedHours: undefined }));
+                      }
+                    }}
+                    style={{ borderColor: formErrors.estimatedHours ? "var(--accent-red)" : undefined }}
                   />
+                  {formErrors.estimatedHours && (
+                    <span style={{ color: "var(--accent-red)", fontSize: 11, marginTop: 4, display: "block" }}>
+                      {formErrors.estimatedHours}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -1602,6 +1879,192 @@ export default function TasksPage() {
               </button>
               <button className="btn btn-secondary" onClick={() => setShowForm(false)} disabled={saving}>
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: EDIT TASK (ADMIN) ── */}
+      {editingTask && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+          onClick={() => setEditingTask(null)}
+        >
+          <div
+            className="card"
+            style={{ padding: 32, width: 500, maxWidth: "95vw", background: "var(--bg-primary)", maxHeight: "90vh", overflowY: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>Edit & Reassign Task</div>
+              <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setEditingTask(null)}>
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                  Task Title <span style={{ color: "var(--accent-red)" }}>*</span>
+                </label>
+                <input
+                  className="input-base"
+                  value={editFormData.title}
+                  onChange={(e) => setEditFormData((p) => ({ ...p, title: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                  Assign To <span style={{ color: "var(--accent-red)" }}>*</span>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <select
+                    className="input-base"
+                    style={{ appearance: "none", paddingRight: 32 }}
+                    value={editFormData.assigneeId}
+                    onChange={(e) => {
+                      const emp = employees.find((em) => em.uid === e.target.value);
+                      setEditFormData((p) => ({
+                        ...p,
+                        assigneeId: e.target.value,
+                        assigneeName: emp?.name ?? "",
+                      }));
+                    }}
+                  >
+                    <option value="">— Select Employee —</option>
+                    {employees.map((emp) => (
+                      <option key={emp.uid} value={emp.uid}>
+                        {emp.name} ({emp.employeeId})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--text-muted)" }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                  Description
+                </label>
+                <textarea
+                  className="input-base"
+                  rows={3}
+                  value={editFormData.desc}
+                  onChange={(e) => setEditFormData((p) => ({ ...p, desc: e.target.value }))}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    className="input-base"
+                    value={editFormData.startDate}
+                    onChange={(e) => setEditFormData((p) => ({ ...p, startDate: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                    Deadline
+                  </label>
+                  <input
+                    type="date"
+                    className="input-base"
+                    value={editFormData.deadline}
+                    onChange={(e) => setEditFormData((p) => ({ ...p, deadline: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                    Priority
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <select
+                      className="input-base"
+                      style={{ appearance: "none", paddingRight: 32 }}
+                      value={editFormData.priority}
+                      onChange={(e) => setEditFormData((p) => ({ ...p, priority: e.target.value as TaskPriority }))}
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                      <option value="Urgent">Urgent</option>
+                      <option value="Critical">Critical</option>
+                    </select>
+                    <ChevronDown size={14} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--text-muted)" }} />
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
+                    Estimated Effort (Hours)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    className="input-base"
+                    value={editFormData.estimatedHours}
+                    onChange={(e) => setEditFormData((p) => ({ ...p, estimatedHours: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1, gap: 6, background: "var(--brand-red)" }}
+                onClick={handleSaveEditTask}
+                disabled={savingEdit}
+              >
+                {savingEdit ? <Loader2 size={14} className="animate-spin" /> : "Save Changes"}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setEditingTask(null)} disabled={savingEdit}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: CONFIRM DELETE (ADMIN) ── */}
+      {deletingTask && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+          onClick={() => setDeletingTask(null)}
+        >
+          <div
+            className="card"
+            style={{ padding: 28, width: 440, maxWidth: "95vw", background: "var(--bg-primary)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--accent-red)" }}>Confirm Delete Task</div>
+              <button className="btn btn-ghost" style={{ padding: "4px 8px" }} onClick={() => setDeletingTask(null)}>
+                <X size={16} />
+              </button>
+            </div>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 20 }}>
+              Are you sure you want to delete task <strong>&quot;{deletingTask.title}&quot;</strong>? This action will permanently remove the task and cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" onClick={() => setDeletingTask(null)} disabled={deletingLoading}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ background: "var(--accent-red)", color: "#fff" }}
+                onClick={handleDeleteTask}
+                disabled={deletingLoading}
+              >
+                {deletingLoading ? <Loader2 size={14} className="animate-spin" /> : "Delete Task"}
               </button>
             </div>
           </div>

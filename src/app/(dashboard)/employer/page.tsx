@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Crown, Briefcase, Mail, Phone, Globe, Linkedin,
   Award, Building2, TrendingUp, Users, DollarSign,
@@ -8,6 +8,8 @@ import {
   Layers, Clock, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
+import { db } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 /* ─────────────────────────────────────────────
    Types
@@ -377,6 +379,44 @@ function KPICard({ kpi }: { kpi: KPI }) {
    Page
 ───────────────────────────────────────────── */
 export default function EmployerPage() {
+  const [empCount, setEmpCount] = useState<number | null>(null);
+  const [taskMetrics, setTaskMetrics] = useState<{ total: number; completed: number; progress: number } | null>(null);
+
+  useEffect(() => {
+    // Fetch live employee count
+    getDocs(collection(db, "employees")).then((snap) => {
+      setEmpCount(snap.size);
+    }).catch(() => setEmpCount(null));
+
+    // Fetch live task utilisation
+    getDocs(collection(db, "tasks")).then((snap) => {
+      const all = snap.docs.map((d) => d.data());
+      const total = all.length;
+      const completed = all.filter((t) => t.status === "completed").length;
+      const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+      setTaskMetrics({ total, completed, progress });
+    }).catch(() => setTaskMetrics(null));
+  }, []);
+
+  const dynamicOrgStats = ORG_STATS.map((s) => {
+    if (s.label === "Team Size" && empCount !== null) {
+      return { ...s, value: `${empCount} Members` };
+    }
+    return s;
+  });
+
+  const dynamicKPIs = KPIS.map((k) => {
+    if (k.label === "Team Utilisation" && taskMetrics !== null) {
+      return {
+        ...k,
+        value: `${taskMetrics.progress}%`,
+        sub: `Live (${taskMetrics.completed}/${taskMetrics.total} tasks approved)`,
+        trend: "Live database sync",
+      };
+    }
+    return k;
+  });
+
   return (
     <>
       <style>{`
@@ -408,7 +448,7 @@ export default function EmployerPage() {
 
         {/* ── Company Overview Cards ── */}
         <div className="emp-org-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 28 }}>
-          {ORG_STATS.map((s) => (
+          {dynamicOrgStats.map((s) => (
             <div key={s.label} className="card" style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 14, position: "relative", overflow: "hidden" }}>
               <div style={{
                 position: "absolute", bottom: -12, right: -12,
@@ -452,7 +492,7 @@ export default function EmployerPage() {
         </div>
 
         <div className="emp-kpi-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14, marginBottom: 36 }}>
-          {KPIS.map((k) => <KPICard key={k.label} kpi={k} />)}
+          {dynamicKPIs.map((k) => <KPICard key={k.label} kpi={k} />)}
         </div>
 
         {/* ── Company Vision Block ── */}

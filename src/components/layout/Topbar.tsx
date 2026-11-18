@@ -15,6 +15,18 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!searchQuery.trim()) return;
+    const q = encodeURIComponent(searchQuery.trim());
+    if (role === "employee") {
+      router.push(`/tasks?search=${q}`);
+    } else {
+      router.push(`/employees?search=${q}`);
+    }
+  };
 
   useEffect(() => {
     if (!profile?.uid) return;
@@ -78,15 +90,24 @@ export default function Topbar({ onMenuToggle }: TopbarProps) {
       <div className="topbar-search" style={{ flex: 1, maxWidth: 400, position: "relative" }}>
         <Search
           size={14}
-          style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}
+          style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", zIndex: 1 }}
         />
-        <input
-          id="topbar-search"
-          type="text"
-          placeholder="Search employees, documents…"
-          className="input-base"
-          style={{ paddingLeft: 32, paddingTop: 7, paddingBottom: 7, fontSize: 13 }}
-        />
+        <form onSubmit={handleSearchSubmit} style={{ width: "100%", margin: 0 }}>
+          <input
+            id="topbar-search"
+            type="text"
+            placeholder="Search employees, documents…"
+            className="input-base"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleSearchSubmit();
+              }
+            }}
+            style={{ paddingLeft: 32, paddingTop: 7, paddingBottom: 7, fontSize: 13, width: "100%" }}
+          />
+        </form>
       </div>
 
       <div style={{ flex: 1 }} />

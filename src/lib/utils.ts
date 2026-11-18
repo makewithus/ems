@@ -215,7 +215,100 @@ export const TASK_STATUS = [
 
 export const TASK_PRIORITIES = ["Low", "Medium", "High", "Urgent", "Critical"] as const;
 
-export const NOTICE_PRIORITY = ["Low", "Normal", "Urgent", "Critical"] as const;
+export const NOTICE_PRIORITY = ["Low", "Normal", "High", "Urgent", "Critical"] as const;
+
+export function normalizeNoticePriority(p: string | undefined | null): "Low" | "Normal" | "High" | "Urgent" | "Critical" {
+  if (!p) return "Normal";
+  const up = String(p).trim().toUpperCase();
+  if (up === "LOW") return "Low";
+  if (up === "NORMAL" || up === "MEDIUM") return "Normal";
+  if (up === "HIGH") return "High";
+  if (up === "URGENT") return "Urgent";
+  if (up === "CRITICAL") return "Critical";
+  return "Normal";
+}
+
+export function isValidUrl(url: string | undefined | null): boolean {
+  if (!url || typeof url !== "string") return false;
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === "not-a-url") return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export function formatPayrollMonth(month: any, year?: any): string {
+  if (!month) return "—";
+  if (typeof month === "number" || (!isNaN(Number(month)) && String(month).trim().length <= 2)) {
+    const m = Number(month);
+    const y = year && !isNaN(Number(year)) ? Number(year) : new Date().getFullYear();
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleString("en-US", { month: "long", year: "numeric" });
+  }
+  const str = String(month).trim();
+  if (/^\d{4}-\d{1,2}$/.test(str)) {
+    const [y, m] = str.split("-");
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return d.toLocaleString("en-US", { month: "long", year: "numeric" });
+  }
+  if (!isNaN(Date.parse(str))) {
+    const d = new Date(str);
+    return d.toLocaleString("en-US", { month: "long", year: "numeric" });
+  }
+  return str;
+}
+
+export function computeHoursWorked(
+  clockIn?: string,
+  clockOut?: string,
+  breakStart?: string,
+  breakEnd?: string
+): string {
+  if (!clockIn || !clockOut) return "—";
+  const inMins = parseTimeToMinutes(clockIn);
+  const outMins = parseTimeToMinutes(clockOut);
+  if (inMins === null || outMins === null || outMins <= inMins) return "—";
+
+  let diff = outMins - inMins;
+
+  // Deduct break if recorded
+  if (breakStart && breakEnd) {
+    const bStart = parseTimeToMinutes(breakStart);
+    const bEnd = parseTimeToMinutes(breakEnd);
+    if (bStart !== null && bEnd !== null && bEnd > bStart) {
+      const bDuration = bEnd - bStart;
+      diff = Math.max(0, diff - bDuration);
+    }
+  }
+
+  const h = Math.floor(diff / 60);
+  const m = diff % 60;
+  return `${h}h ${m}m`;
+}
+
+export function calculateProfileCompletion(data: {
+  phone?: string;
+  dob?: string;
+  address?: string;
+  emergencyContact?: { name?: string; phone?: string; relation?: string };
+  department?: string;
+  designation?: string;
+}): number {
+  if (!data) return 0;
+  const fields = [
+    data.phone,
+    data.dob,
+    data.address,
+    data.emergencyContact?.name,
+    data.emergencyContact?.phone,
+    data.emergencyContact?.relation,
+  ];
+  const filled = fields.filter((f) => f && String(f).trim() !== "").length;
+  return Math.round((filled / fields.length) * 100);
+}
 
 export const ATTENDANCE_STATUS = [
   "Present",

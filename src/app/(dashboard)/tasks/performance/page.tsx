@@ -44,7 +44,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { Task, TaskPriority, TaskStatus, TaskActivityLog, Role } from "@/types";
-import { formatDate, formatDateTime, timeAgo, formatDeadlineHealth } from "@/lib/utils";
+import { formatDate, formatDateTime, timeAgo, formatDeadlineHealth, isValidUrl } from "@/lib/utils";
 import {
   calculateEmployeeWorkloads,
   calculateProgress,
@@ -108,7 +108,7 @@ export default function TeamPerformancePage() {
   });
   const [savingTask, setSavingTask] = useState(false);
 
-  /* ── 1. Real-time Employees Listener ── */
+  /* ── 1. Real-time Employees Listener (Deduplicated from authoritative employees collection) ── */
   useEffect(() => {
     if (!isAdmin) {
       if (user?.uid) {
@@ -126,9 +126,11 @@ export default function TeamPerformancePage() {
       return;
     }
 
-    const unsubUsers = onSnapshot(
-      collection(db, "users"),
+    const unsubEmployees = onSnapshot(
+      collection(db, "employees"),
       (snap) => {
+        const seenEmpIds = new Set<string>();
+        const seenNames = new Set<string>();
         const empList: {
           uid: string;
           name: string;
@@ -140,16 +142,24 @@ export default function TeamPerformancePage() {
 
         snap.docs.forEach((d) => {
           const data = d.data();
-          if (data.role === "employee" || data.displayName || data.employeeId) {
-            empList.push({
-              uid: d.id,
-              name: data.displayName || data.email || d.id,
-              employeeId: data.employeeId || "EMP",
-              department: data.department || "General",
-              designation: data.designation || (data.role === "employee" ? "Employee" : "Team Member"),
-              photoURL: data.photoURL,
-            });
-          }
+          if (data.status === "Archived") return;
+
+          const empId = data.employeeId || d.id;
+          const fullName = `${data.firstName || ""} ${data.lastName || ""}`.trim() || data.name || data.email || empId;
+          const normName = fullName.toLowerCase().replace(/\s+/g, " ");
+
+          if (seenEmpIds.has(empId) || (normName && seenNames.has(normName))) return;
+          seenEmpIds.add(empId);
+          if (normName) seenNames.add(normName);
+
+          empList.push({
+            uid: data.uid || d.id,
+            name: fullName,
+            employeeId: empId,
+            department: data.department || "General",
+            designation: data.designation || "Employee",
+            photoURL: data.photoURL,
+          });
         });
 
         empList.sort((a, b) => a.name.localeCompare(b.name));
@@ -158,7 +168,7 @@ export default function TeamPerformancePage() {
       (err) => console.error("Error fetching employees:", err)
     );
 
-    return () => unsubUsers();
+    return () => unsubEmployees();
   }, [isAdmin, user?.uid, profile?.displayName, user?.displayName, user?.email, profile?.employeeId, profile?.department, profile?.designation, profile?.photoURL, role]);
 
   /* ── 2. Real-time Tasks Listener ── */
@@ -303,7 +313,7 @@ export default function TeamPerformancePage() {
 
     const overloadedCount = employeeWorkloads.filter((e) => e.workloadState === "overloaded").length;
     const fallingBehindCount = employeeWorkloads.filter((e) => e.workloadState === "falling_behind").length;
-    const optimalCount = employeeWorkloads.filter((e) => e.workloadState === "optimal").length;
+    const optimalCount = employeeWorkloads.filter((e) => e.workloadState === "optimal" || e.workloadState === "completed").length;
 
     return {
       totalTasks,
@@ -331,7 +341,7 @@ export default function TeamPerformancePage() {
         workloadFilter === "all" ||
         (workloadFilter === "overloaded" && emp.workloadState === "overloaded") ||
         (workloadFilter === "falling_behind" && emp.workloadState === "falling_behind") ||
-        (workloadFilter === "optimal" && emp.workloadState === "optimal") ||
+        (workloadFilter === "optimal" && (emp.workloadState === "optimal" || emp.workloadState === "completed")) ||
         (workloadFilter === "completed" && emp.workloadState === "completed");
 
       return matchesSearch && matchesWorkload;
@@ -564,7 +574,7 @@ export default function TeamPerformancePage() {
   return (
     <div className="page-container" style={{ maxWidth: 1400, margin: "0 auto", paddingBottom: 64 }}>
       {/* ── Top Navigation Tabs & Page Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 14 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
             <span
@@ -592,7 +602,7 @@ export default function TeamPerformancePage() {
         </div>
 
         {/* View Switcher: Task Board vs Team Performance */}
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div
             style={{
               display: "flex",
@@ -643,7 +653,7 @@ export default function TeamPerformancePage() {
         <div className="card" style={{ padding: "18px 20px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase" }}>
-              Team Progress
+              {isAdmin ? "Team Progress" : "My Progress"}
             </span>
             <div
               style={{
@@ -924,8 +934,13 @@ export default function TeamPerformancePage() {
         style={{
           display: "flex",
           borderBottom: "1px solid var(--border)",
-          gap: 20,
+          gap: 16,
           marginBottom: 20,
+          overflowX: "auto",
+          maxWidth: "100%",
+          whiteSpace: "nowrap",
+          WebkitOverflowScrolling: "touch",
+          paddingBottom: 2,
         }}
       >
         <button
@@ -942,6 +957,7 @@ export default function TeamPerformancePage() {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
           }}
         >
           <Users size={15} /> All Employees ({employeeWorkloads.length})
@@ -961,6 +977,7 @@ export default function TeamPerformancePage() {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
           }}
         >
           <FileCheck2 size={15} /> Review Queue
@@ -994,6 +1011,7 @@ export default function TeamPerformancePage() {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
           }}
         >
           <Calendar size={15} /> Deadlines & Overdue
@@ -1027,6 +1045,7 @@ export default function TeamPerformancePage() {
             display: "flex",
             alignItems: "center",
             gap: 6,
+            flexShrink: 0,
           }}
         >
           <History size={15} /> Activity Timeline & Audit Logs
@@ -1485,128 +1504,216 @@ export default function TeamPerformancePage() {
               <p style={{ fontSize: 12 }}>No employee tasks are currently waiting for admin review.</p>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {reviewQueueTasks.map((t) => {
-                const delayed = isSubmissionDelayed(t);
-                return (
-                  <div
-                    key={t.id}
-                    className="card"
-                    style={{
-                      padding: 22,
-                      borderLeft: "4px solid var(--accent-amber)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      flexWrap: "wrap",
-                      gap: 16,
-                    }}
-                  >
-                    <div style={{ flex: 1, minWidth: 320 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <span style={{ fontSize: 16, fontWeight: 700 }}>{t.title}</span>
-                        <span
-                          className="badge"
-                          style={{ background: "rgba(245, 158, 11, 0.15)", color: "var(--accent-amber)", fontWeight: 700 }}
-                        >
-                          Under Review
-                        </span>
-                        {delayed && (
+            <div className="table-container" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius)" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ minWidth: 220 }}>Task</th>
+                    <th style={{ minWidth: 150 }}>Assignee</th>
+                    <th style={{ textAlign: "center", minWidth: 90 }}>Priority</th>
+                    <th style={{ minWidth: 120 }}>Deadline</th>
+                    <th style={{ minWidth: 130 }}>Submitted At</th>
+                    <th style={{ minWidth: 240 }}>Submission Notes & Proof</th>
+                    <th style={{ textAlign: "right", minWidth: 200 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviewQueueTasks.map((t) => {
+                    const delayed = isSubmissionDelayed(t);
+                    const empData = employees.find((e) => e.uid === t.assigneeId || e.uid === t.assignedTo);
+
+                    return (
+                      <tr key={t.id}>
+                        {/* Task Title & Desc */}
+                        <td>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)", marginBottom: 3 }}>
+                            {t.title}
+                          </div>
+                          {t.desc && (
+                            <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4, maxWidth: 300 }}>
+                              {t.desc}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Assignee */}
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div
+                              style={{
+                                width: 26,
+                                height: 26,
+                                borderRadius: "50%",
+                                background: "rgba(255, 255, 255, 0.08)",
+                                border: "1px solid var(--border)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: 700,
+                                fontSize: 10,
+                                color: "var(--text-primary)",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {(t.assigneeName || "U").slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text-primary)" }}>
+                                {t.assigneeName || "Unassigned"}
+                              </div>
+                              {empData?.employeeId && (
+                                <div style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
+                                  {empData.employeeId}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Priority */}
+                        <td style={{ textAlign: "center" }}>
                           <span
                             className="badge"
-                            style={{ background: "rgba(239, 68, 68, 0.15)", color: "var(--accent-red)", fontWeight: 600 }}
-                          >
-                            Delayed Submission
-                          </span>
-                        )}
-                      </div>
-
-                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 12 }}>
-                        Assignee: <strong>{t.assigneeName}</strong> • Deadline:{" "}
-                        {t.deadline ? formatDate(t.deadline) : "None"} • Submitted:{" "}
-                        {t.submittedAt ? timeAgo(toDateObj(t.submittedAt)) : "Recently"}
-                      </div>
-
-                      {/* Employee Submission Notes */}
-                      {t.submissionNotes && (
-                        <div
-                          style={{
-                            background: "var(--bg-primary)",
-                            border: "1px solid var(--border)",
-                            padding: "10px 14px",
-                            borderRadius: "var(--radius-sm)",
-                            fontSize: 12,
-                            marginBottom: 10,
-                          }}
-                        >
-                          <span style={{ color: "var(--text-muted)", fontWeight: 600, display: "block", marginBottom: 2 }}>
-                            Employee Submission Notes:
-                          </span>
-                          {t.submissionNotes}
-                        </div>
-                      )}
-
-                      {/* Proof URL / Work Link */}
-                      {t.proofURL && (
-                        <div style={{ fontSize: 12, marginBottom: 8 }}>
-                          <a
-                            href={t.proofURL}
-                            target="_blank"
-                            rel="noreferrer"
                             style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 4,
-                              color: "var(--accent-blue)",
-                              textDecoration: "underline",
+                              background:
+                                t.priority === "Urgent" || t.priority === "Critical"
+                                  ? "rgba(239, 68, 68, 0.15)"
+                                  : t.priority === "High"
+                                  ? "rgba(245, 158, 11, 0.15)"
+                                  : "rgba(59, 130, 246, 0.12)",
+                              color:
+                                t.priority === "Urgent" || t.priority === "Critical"
+                                  ? "var(--accent-red)"
+                                  : t.priority === "High"
+                                  ? "var(--accent-amber)"
+                                  : "var(--accent-blue)",
+                              fontSize: 10.5,
+                              fontWeight: 700,
                             }}
                           >
-                            <ExternalLink size={12} /> View Attached Work Proof / Link
-                          </a>
-                        </div>
-                      )}
-                    </div>
+                            {t.priority}
+                          </span>
+                        </td>
 
-                    {/* Review Decision Buttons */}
-                    {isAdmin && (
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button
-                          className="btn btn-primary"
-                          style={{ background: "var(--accent-green)", color: "#000", padding: "8px 16px", fontSize: 12, gap: 6 }}
-                          onClick={() => {
-                            setReviewTask(t);
-                            setReviewActionType("approve");
-                          }}
-                        >
-                          <CheckCircle2 size={14} /> Approve & Complete
-                        </button>
+                        {/* Deadline */}
+                        <td style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                          {t.deadline ? formatDate(t.deadline) : "—"}
+                        </td>
 
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: "8px 14px", fontSize: 12, gap: 6 }}
-                          onClick={() => {
-                            setReviewTask(t);
-                            setReviewActionType("changes_requested");
-                          }}
-                        >
-                          <MessageSquare size={14} /> Request Changes
-                        </button>
+                        {/* Submitted At & Delayed Flag */}
+                        <td>
+                          <div style={{ fontSize: 12 }}>
+                            {t.submittedAt ? formatDateTime(toDateObj(t.submittedAt)) : "Recently"}
+                          </div>
+                          {delayed && (
+                            <span
+                              className="badge"
+                              style={{
+                                background: "rgba(239, 68, 68, 0.15)",
+                                color: "var(--accent-red)",
+                                fontSize: 9.5,
+                                fontWeight: 700,
+                                marginTop: 4,
+                                display: "inline-block",
+                              }}
+                            >
+                              Delayed Submission
+                            </span>
+                          )}
+                        </td>
 
-                        <button
-                          className="btn btn-ghost"
-                          style={{ color: "var(--accent-red)", padding: "8px 12px", fontSize: 12 }}
-                          onClick={() => {
-                            setReviewTask(t);
-                            setReviewActionType("reject");
-                          }}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                        {/* Submission Notes & Proof */}
+                        <td>
+                          {t.submissionNotes && (
+                            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
+                              {t.submissionNotes}
+                            </div>
+                          )}
+                          {t.proofURL && (
+                            <div style={{ fontSize: 11.5 }}>
+                              {isValidUrl(t.proofURL) ? (
+                                <a
+                                  href={t.proofURL}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    color: "var(--accent-blue)",
+                                    textDecoration: "underline",
+                                  }}
+                                >
+                                  <ExternalLink size={11} /> View Attached Work Proof
+                                </a>
+                              ) : (
+                                <span style={{ color: "var(--accent-red)" }}>
+                                  Invalid proof URL: {t.proofURL}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "inline-flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                            {isAdmin ? (
+                              <>
+                                <button
+                                  className="btn btn-primary"
+                                  style={{ background: "var(--accent-green)", color: "#000", padding: "5px 10px", fontSize: 11, gap: 4 }}
+                                  onClick={() => {
+                                    setReviewTask(t);
+                                    setReviewActionType("approve");
+                                  }}
+                                >
+                                  <CheckCircle2 size={12} /> Approve
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ padding: "5px 10px", fontSize: 11, gap: 4 }}
+                                  onClick={() => {
+                                    setReviewTask(t);
+                                    setReviewActionType("changes_requested");
+                                  }}
+                                >
+                                  <MessageSquare size={12} /> Changes
+                                </button>
+                                <button
+                                  className="btn btn-ghost"
+                                  style={{ color: "var(--accent-red)", padding: "5px 8px", fontSize: 11 }}
+                                  onClick={() => {
+                                    setReviewTask(t);
+                                    setReviewActionType("reject");
+                                  }}
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            ) : (
+                              <span
+                                className="badge"
+                                style={{ background: "rgba(245, 158, 11, 0.15)", color: "var(--accent-amber)", fontSize: 10.5 }}
+                              >
+                                Awaiting Admin Review
+                              </span>
+                            )}
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: "5px 8px" }}
+                              title="Activity History"
+                              onClick={() => setTimelineTask(t)}
+                            >
+                              <History size={13} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

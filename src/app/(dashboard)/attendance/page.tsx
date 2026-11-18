@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Clock, Play, Square, Coffee, ChevronDown, Loader2,
   CalendarDays, Eye, LayoutDashboard, PenLine,
@@ -7,7 +7,9 @@ import {
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { useAttendanceStore } from "@/store/attendance.store";
-import { formatDate, fmt24to12 } from "@/lib/utils";
+import { formatDate, fmt24to12, computeHoursWorked } from "@/lib/utils";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot } from "firebase/firestore";
 import { useDepartments } from "@/hooks/useDepartments";
 import {
   useAttendanceByDate,
@@ -43,9 +45,19 @@ export default function AttendancePage() {
   const [clocking, setClocking] = useState(false);
   const [breaking, setBreaking] = useState(false);
   const [quickGlance, setQuickGlance] = useState<{ employeeId: string; employeeName: string } | null>(null);
+  const [totalHeadcount, setTotalHeadcount] = useState(0);
   const { departments } = useDepartments();
   const today = formatDate(new Date().toISOString());
   const todayStr = new Date().toISOString().split("T")[0];
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsub = onSnapshot(collection(db, "employees"), (snap) => {
+      const active = snap.docs.filter((d) => d.data().status === "Active");
+      setTotalHeadcount(active.length);
+    });
+    return () => unsub();
+  }, [isAdmin]);
 
   const { records: adminRecords, loading: adminLoading } = useAttendanceByDate(
     isAdmin ? selectedDate : ""
@@ -71,11 +83,17 @@ export default function AttendancePage() {
     (r) => dept === "All" || r.department === dept
   );
 
+  const presentOnly = filteredAdmin.filter((r) => r.status === "Present").length;
+  const lateOnly    = filteredAdmin.filter((r) => r.status === "Late").length;
+  const halfDayOnly = filteredAdmin.filter((r) => r.status === "Half Day").length;
+  const loggedCount = presentOnly + lateOnly + halfDayOnly;
+  const absentCount = totalHeadcount > 0 ? Math.max(0, totalHeadcount - loggedCount) : filteredAdmin.filter((r) => r.status === "Absent").length;
+
   const stats = {
-    Present:    filteredAdmin.filter((r) => r.status === "Present" || r.status === "Late").length,
-    Absent:     filteredAdmin.filter((r) => r.status === "Absent").length,
-    Late:       filteredAdmin.filter((r) => r.status === "Late").length,
-    "Half Day": filteredAdmin.filter((r) => r.status === "Half Day").length,
+    Present:    presentOnly,
+    Absent:     absentCount,
+    Late:       lateOnly,
+    "Half Day": halfDayOnly,
   };
 
   const handleClockIn = async () => {
@@ -261,7 +279,11 @@ export default function AttendancePage() {
                           {r.breakStart ? fmt24to12(r.breakStart) : "—"}
                           {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
                         </td>
-                        <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
+                        <td style={{ fontSize: 13, fontWeight: 500 }}>
+                          {(r.hoursWorked && r.hoursWorked !== "—")
+                            ? r.hoursWorked
+                            : computeHoursWorked(r.clockIn, r.clockOut, r.breakStart, r.breakEnd)}
+                        </td>
                         <td>
                           <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
                             {r.status}
@@ -377,7 +399,11 @@ export default function AttendancePage() {
                             {r.breakStart ? fmt24to12(r.breakStart) : "—"}
                             {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
                           </td>
-                          <td style={{ fontSize: 13, fontWeight: 500 }}>{r.hoursWorked}</td>
+                          <td style={{ fontSize: 13, fontWeight: 500 }}>
+                          {(r.hoursWorked && r.hoursWorked !== "—")
+                            ? r.hoursWorked
+                            : computeHoursWorked(r.clockIn, r.clockOut, r.breakStart, r.breakEnd)}
+                        </td>
                           <td>
                             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                               <span className="badge" style={{ background: statusBadge[r.status]?.bg, color: statusBadge[r.status]?.color }}>
