@@ -29,6 +29,7 @@ import {
   Loader2,
   AlertTriangle,
   ClipboardList,
+  Pencil,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth.store";
 import { db } from "@/lib/firebase";
@@ -56,6 +57,7 @@ import {
   isTaskOverdue,
   isSubmissionDelayed,
   transitionTaskStatus,
+  logTaskActivity,
   EmployeeWorkload,
   toDateObj,
 } from "@/lib/taskService";
@@ -477,6 +479,33 @@ export default function TeamPerformancePage() {
       }
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to start task");
+    }
+  };
+
+  /* ── 5.3 Admin Updates Task Deadline Directly ── */
+  const handleUpdateDeadline = async (task: Task, newDeadline: string) => {
+    if (!newDeadline || newDeadline === task.deadline) return;
+    try {
+      await updateDoc(doc(db, "tasks", task.id), {
+        deadline: newDeadline,
+        updatedAt: serverTimestamp(),
+      });
+      await logTaskActivity({
+        taskId: task.id,
+        taskTitle: task.title,
+        companyId: profile?.companyId || "default",
+        actorId: user?.uid || "",
+        actorName: profile?.displayName || user?.displayName || "Admin",
+        actorRole: (role as Role) || "super_admin",
+        action: "ADMIN_OVERRIDE",
+        comment: `Deadline changed from ${task.deadline || "none"} to ${newDeadline}`,
+      });
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? { ...t, deadline: newDeadline } : t))
+      );
+      toast.success(`Deadline updated to ${formatDate(newDeadline)}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update deadline");
     }
   };
 
@@ -1643,18 +1672,18 @@ export default function TeamPerformancePage() {
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
-                              gap: 6,
+                              gap: 7,
                               fontSize: 12.5,
                               whiteSpace: "nowrap",
-                              padding: "4px 9px",
+                              padding: "5px 10px",
                               borderRadius: 6,
-                              background: "rgba(255, 255, 255, 0.04)",
-                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              background: "rgba(255, 255, 255, 0.05)",
+                              border: "1px solid rgba(255, 255, 255, 0.12)",
                               fontWeight: 500,
                               color: "var(--text-primary)",
                             }}
                           >
-                            <Calendar size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                            <Calendar size={15} style={{ color: "var(--accent-blue)", flexShrink: 0 }} />
                             <span style={{ whiteSpace: "nowrap" }}>{t.deadline ? formatDate(t.deadline) : "—"}</span>
                           </div>
                         </td>
@@ -1936,25 +1965,63 @@ export default function TeamPerformancePage() {
                           </span>
                         </td>
 
-                        {/* Deadline (Non-wrapping, enclosed, legible) */}
+                        {/* Deadline (Interactive, visible calendar icon, non-wrapping) */}
                         <td style={{ padding: "13px 16px", whiteSpace: "nowrap", verticalAlign: "middle" }}>
-                          <div
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: 6,
-                              fontSize: 12.5,
-                              whiteSpace: "nowrap",
-                              padding: "4px 9px",
-                              borderRadius: 6,
-                              background: overdue ? "rgba(239, 68, 68, 0.08)" : "rgba(255, 255, 255, 0.04)",
-                              border: overdue ? "1px solid rgba(239, 68, 68, 0.25)" : "1px solid rgba(255, 255, 255, 0.08)",
-                              fontWeight: overdue ? 700 : 500,
-                              color: overdue ? "var(--accent-red)" : "var(--text-primary)",
-                            }}
-                          >
-                            <Calendar size={13} style={{ color: overdue ? "var(--accent-red)" : "var(--text-muted)", flexShrink: 0 }} />
-                            <span style={{ whiteSpace: "nowrap" }}>{t.deadline ? formatDate(t.deadline) : "—"}</span>
+                          <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                if (isAdmin) {
+                                  const input = e.currentTarget.parentElement?.querySelector("input[type='date']") as HTMLInputElement;
+                                  input?.showPicker?.();
+                                }
+                              }}
+                              title={isAdmin ? "Click calendar icon to pick or change deadline" : `Deadline: ${t.deadline ? formatDate(t.deadline) : "None"}`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 7,
+                                fontSize: 12.5,
+                                whiteSpace: "nowrap",
+                                padding: "5px 10px",
+                                borderRadius: 6,
+                                background: overdue ? "rgba(239, 68, 68, 0.12)" : "rgba(255, 255, 255, 0.05)",
+                                border: overdue ? "1px solid rgba(239, 68, 68, 0.35)" : "1px solid rgba(255, 255, 255, 0.12)",
+                                fontWeight: overdue ? 700 : 500,
+                                color: overdue ? "var(--accent-red)" : "var(--text-primary)",
+                                cursor: isAdmin ? "pointer" : "default",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <Calendar
+                                size={15}
+                                style={{
+                                  color: overdue ? "var(--accent-red)" : "var(--accent-blue)",
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span style={{ whiteSpace: "nowrap" }}>
+                                {t.deadline ? formatDate(t.deadline) : "Set deadline"}
+                              </span>
+                              {isAdmin && (
+                                <Pencil size={11} style={{ opacity: 0.7, marginLeft: 2, flexShrink: 0, color: "var(--text-secondary)" }} />
+                              )}
+                            </button>
+                            {isAdmin && (
+                              <input
+                                type="date"
+                                aria-label="Change task deadline"
+                                value={t.deadline ? t.deadline.slice(0, 10) : ""}
+                                onChange={(e) => handleUpdateDeadline(t, e.target.value)}
+                                style={{
+                                  position: "absolute",
+                                  opacity: 0,
+                                  width: 0,
+                                  height: 0,
+                                  pointerEvents: "none",
+                                }}
+                              />
+                            )}
                           </div>
                         </td>
 
@@ -2652,25 +2719,77 @@ export default function TeamPerformancePage() {
                   <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
                     Start Date
                   </label>
-                  <input
-                    type="date"
-                    className="input-base"
-                    value={assignForm.startDate}
-                    onChange={(e) => setAssignForm((p) => ({ ...p, startDate: e.target.value }))}
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      id="assign-task-start-date"
+                      type="date"
+                      className="input-base"
+                      value={assignForm.startDate}
+                      onChange={(e) => setAssignForm((p) => ({ ...p, startDate: e.target.value }))}
+                      style={{ paddingRight: 36 }}
+                    />
+                    <button
+                      type="button"
+                      title="Open calendar picker"
+                      onClick={() => {
+                        const el = document.getElementById("assign-task-start-date") as HTMLInputElement;
+                        el?.showPicker?.();
+                      }}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent-blue)",
+                        cursor: "pointer",
+                        padding: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Calendar size={16} />
+                    </button>
+                  </div>
                 </div>
 
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
                     Deadline (Expected Completion) *
                   </label>
-                  <input
-                    required
-                    type="date"
-                    className="input-base"
-                    value={assignForm.deadline}
-                    onChange={(e) => setAssignForm((p) => ({ ...p, deadline: e.target.value }))}
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      id="assign-task-deadline"
+                      required
+                      type="date"
+                      className="input-base"
+                      value={assignForm.deadline}
+                      onChange={(e) => setAssignForm((p) => ({ ...p, deadline: e.target.value }))}
+                      style={{ paddingRight: 36 }}
+                    />
+                    <button
+                      type="button"
+                      title="Open calendar picker"
+                      onClick={() => {
+                        const el = document.getElementById("assign-task-deadline") as HTMLInputElement;
+                        el?.showPicker?.();
+                      }}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent-blue)",
+                        cursor: "pointer",
+                        padding: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Calendar size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
 

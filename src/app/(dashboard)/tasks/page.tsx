@@ -1259,8 +1259,11 @@ export default function TasksPage() {
                     <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                       {t.startDate ? formatDate(t.startDate) : "—"}
                     </td>
-                    <td style={{ fontSize: 12, color: overdue ? "var(--accent-red)" : "var(--text-muted)", fontWeight: overdue ? 700 : 500, whiteSpace: "nowrap" }}>
-                      {t.deadline ? formatDate(t.deadline) : "—"}
+                    <td style={{ fontSize: 12, color: overdue ? "var(--accent-red)" : "var(--text-primary)", fontWeight: overdue ? 700 : 500, whiteSpace: "nowrap" }}>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                        <Calendar size={13} style={{ color: overdue ? "var(--accent-red)" : "var(--accent-blue)", flexShrink: 0 }} />
+                        <span>{t.deadline ? formatDate(t.deadline) : "—"}</span>
+                      </div>
                     </td>
                     <td>
                       <span className="badge" style={{ background: `${colColor}20`, color: colColor, fontWeight: 600 }}>
@@ -1786,28 +1789,80 @@ export default function TasksPage() {
                   <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
                     Start Date
                   </label>
-                  <input
-                    type="date"
-                    className="input-base"
-                    value={newTask.startDate}
-                    onChange={(e) => setNewTask((p) => ({ ...p, startDate: e.target.value }))}
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      id="new-task-start-date"
+                      type="date"
+                      className="input-base"
+                      value={newTask.startDate}
+                      onChange={(e) => setNewTask((p) => ({ ...p, startDate: e.target.value }))}
+                      onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}
+                      style={{ paddingRight: 36 }}
+                    />
+                    <button
+                      type="button"
+                      title="Open calendar picker"
+                      onClick={() => {
+                        const el = document.getElementById("new-task-start-date") as HTMLInputElement;
+                        el?.showPicker?.();
+                      }}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent-blue)",
+                        cursor: "pointer",
+                        padding: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Calendar size={16} />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
                     Deadline <span style={{ color: "var(--accent-red)" }}>*</span>
                   </label>
-                  <input
-                    id="task-deadline"
-                    type="date"
-                    className="input-base"
-                    value={newTask.deadline}
-                    onChange={(e) => {
-                      setNewTask((p) => ({ ...p, deadline: e.target.value }));
-                      if (formErrors.deadline) setFormErrors((err) => ({ ...err, deadline: undefined }));
-                    }}
-                    style={{ borderColor: formErrors.deadline ? "var(--accent-red)" : undefined }}
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      id="task-deadline"
+                      type="date"
+                      className="input-base"
+                      value={newTask.deadline}
+                      onChange={(e) => {
+                        setNewTask((p) => ({ ...p, deadline: e.target.value }));
+                        if (formErrors.deadline) setFormErrors((err) => ({ ...err, deadline: undefined }));
+                      }}
+                      onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}
+                      style={{ borderColor: formErrors.deadline ? "var(--accent-red)" : undefined, paddingRight: 36 }}
+                    />
+                    <button
+                      type="button"
+                      title="Open calendar picker"
+                      onClick={() => {
+                        const el = document.getElementById("task-deadline") as HTMLInputElement;
+                        el?.showPicker?.();
+                      }}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent-blue)",
+                        cursor: "pointer",
+                        padding: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Calendar size={16} />
+                    </button>
+                  </div>
                   {formErrors.deadline && (
                     <span style={{ color: "var(--accent-red)", fontSize: 11, marginTop: 4, display: "block" }}>
                       {formErrors.deadline}
@@ -1964,23 +2019,77 @@ export default function TasksPage() {
                   <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
                     Start Date
                   </label>
-                  <input
-                    type="date"
-                    className="input-base"
-                    value={editFormData.startDate}
-                    onChange={(e) => setEditFormData((p) => ({ ...p, startDate: e.target.value }))}
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      id="edit-task-start-date"
+                      type="date"
+                      className="input-base"
+                      value={editFormData.startDate}
+                      onChange={(e) => setEditFormData((p) => ({ ...p, startDate: e.target.value }))}
+                      onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}
+                      style={{ paddingRight: 36 }}
+                    />
+                    <button
+                      type="button"
+                      title="Open calendar picker"
+                      onClick={() => {
+                        const el = document.getElementById("edit-task-start-date") as HTMLInputElement;
+                        el?.showPicker?.();
+                      }}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent-blue)",
+                        cursor: "pointer",
+                        padding: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Calendar size={16} />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>
                     Deadline
                   </label>
-                  <input
-                    type="date"
-                    className="input-base"
-                    value={editFormData.deadline}
-                    onChange={(e) => setEditFormData((p) => ({ ...p, deadline: e.target.value }))}
-                  />
+                  <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                    <input
+                      id="edit-task-deadline"
+                      type="date"
+                      className="input-base"
+                      value={editFormData.deadline}
+                      onChange={(e) => setEditFormData((p) => ({ ...p, deadline: e.target.value }))}
+                      onClick={(e) => { try { e.currentTarget.showPicker?.(); } catch {} }}
+                      style={{ paddingRight: 36 }}
+                    />
+                    <button
+                      type="button"
+                      title="Open calendar picker"
+                      onClick={() => {
+                        const el = document.getElementById("edit-task-deadline") as HTMLInputElement;
+                        el?.showPicker?.();
+                      }}
+                      style={{
+                        position: "absolute",
+                        right: 8,
+                        background: "none",
+                        border: "none",
+                        color: "var(--accent-blue)",
+                        cursor: "pointer",
+                        padding: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Calendar size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
 

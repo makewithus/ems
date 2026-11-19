@@ -1,8 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-
 :root {
+  color-scheme: dark;
+  accent-color: var(--brand-red);
+
   --bg-primary: #0a0a0a;
   --bg-secondary: #111111;
   --bg-dark: #060606;
@@ -47,10 +49,12 @@
 }
 
 html {
+  color-scheme: dark;
   scroll-behavior: smooth;
 }
 
 body {
+  color-scheme: dark;
   font-family: 'Space Mono', monospace;
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -149,10 +153,108 @@ h1, h2, h3, h4, h5, h6 {
   font-family: inherit;
   transition: border-color 0.15s;
   outline: none;
+  color-scheme: dark;
+  accent-color: var(--brand-red);
 }
 .input-base::placeholder { color: var(--text-muted); }
 .input-base:focus {
   border-color: var(--text-primary);
+}
+
+/* Ensure all form controls adapt to dark color scheme */
+input, select, textarea, button {
+  color-scheme: dark;
+}
+
+/* ============================================================
+   CALENDAR & DATE PICKER THEME
+   ============================================================ */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+input[type="month"],
+input[type="week"] {
+  color-scheme: dark;
+  accent-color: var(--brand-red);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: 'Space Mono', monospace;
+  position: relative;
+}
+
+/* Ensure clean font and color for date segments */
+input[type="date"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit,
+input[type="month"]::-webkit-datetime-edit,
+input[type="week"]::-webkit-datetime-edit {
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+input[type="month"]::-webkit-datetime-edit-fields-wrapper,
+input[type="week"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="datetime-local"]::-webkit-datetime-edit-text,
+input[type="time"]::-webkit-datetime-edit-text,
+input[type="month"]::-webkit-datetime-edit-text,
+input[type="week"]::-webkit-datetime-edit-text {
+  color: var(--text-muted);
+  padding: 0 1px;
+}
+
+/* Highlight active date field segment with brand red */
+input[type="date"]::-webkit-datetime-edit-month-field:focus,
+input[type="date"]::-webkit-datetime-edit-day-field:focus,
+input[type="date"]::-webkit-datetime-edit-year-field:focus,
+input[type="datetime-local"]::-webkit-datetime-edit-month-field:focus,
+input[type="datetime-local"]::-webkit-datetime-edit-day-field:focus,
+input[type="datetime-local"]::-webkit-datetime-edit-year-field:focus {
+  background-color: var(--accent-red-dim);
+  color: var(--brand-red);
+  border-radius: 2px;
+  outline: none;
+}
+
+/* iOS Safari text alignment fix */
+input[type="date"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="month"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.5em;
+}
+
+/* Interactive calendar picker icon inside input */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="week"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.95;
+  margin-left: 6px;
+  padding: 3px;
+  border-radius: 4px;
+  filter: brightness(1.2);
+  transition: opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover,
+input[type="week"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: brightness(1.4);
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: scale(1.1);
 }
 
 /* Button base */
