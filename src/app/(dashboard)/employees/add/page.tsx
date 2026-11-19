@@ -21,21 +21,23 @@ import { useAuthStore } from "@/store/auth.store";
 import { logAudit } from "@/lib/audit";
 
 const schema = z.object({
-  firstName:      z.string().min(1, "First name is required").regex(/^[A-Za-z\s'-]+$/, "First name must contain letters only"),
-  lastName:       z.string().min(1, "Last name is required").regex(/^[A-Za-z\s'-]+$/, "Last name must contain letters only"),
+  firstName:      z.string().trim().min(1, "First name is required").regex(/^[\p{L}\s'-]+$/u, "First name must contain letters only"),
+  lastName:       z.string().trim().min(1, "Last name is required").regex(/^[\p{L}\s'-]+$/u, "Last name must contain letters only"),
   phone:          z.string().optional().refine((val) => {
                     if (!val || !val.trim()) return true;
+                    if (/[a-zA-Z]/.test(val)) return false;
                     const cleaned = val.replace(/[\s\-()]/g, "");
                     return /^(\+?\d{7,15})$/.test(cleaned);
                   }, "Please enter a valid phone number (digits only, 7-15 digits)"),
   dob:            z.string().optional().refine((val) => {
                     if (!val || !val.trim()) return true;
-                    const d = new Date(val);
+                    const d = new Date(val + "T00:00:00");
                     if (isNaN(d.getTime())) return false;
                     const now = new Date();
+                    now.setHours(0, 0, 0, 0);
                     if (d >= now) return false;
                     const age = now.getFullYear() - d.getFullYear() - (now < new Date(now.getFullYear(), d.getMonth(), d.getDate()) ? 1 : 0);
-                    return age >= 18;
+                    return age >= 18 && age <= 100;
                   }, "Date of birth must be a past date and employee must be at least 18 years old"),
   gender:         z.string().optional(),
   address:        z.string().optional(),
@@ -160,6 +162,19 @@ export default function AddEmployeePage() {
   const onSubmit = async (data: FormData) => {
     setSaving(true);
     try {
+      // 0. Enforce phone uniqueness if phone is provided
+      if (data.phone && data.phone.trim()) {
+        const cleaned = data.phone.replace(/[\s\-()]/g, "");
+        const { collection: col, query: q, where: w, getDocs: gd } = await import("firebase/firestore");
+        const phoneSnap = await gd(q(col(db, "employees"), w("phone", "==", cleaned)));
+        const rawPhoneSnap = await gd(q(col(db, "employees"), w("phone", "==", data.phone.trim())));
+        if (!phoneSnap.empty || !rawPhoneSnap.empty) {
+          toast.error("This phone number is already registered to another employee.");
+          setSaving(false);
+          return;
+        }
+      }
+
       // 1. Create Firebase Auth account via secondary app (admin session unaffected)
       const { uid, email } = await createEmployeeAuth(data.firstName, data.password);
 
@@ -346,10 +361,10 @@ export default function AddEmployeePage() {
               <Field label="Last Name *" id="lastName" error={errors.lastName?.message}>
                 <input id="lastName" className="input-base" placeholder="Mehta" {...register("lastName")} />
               </Field>
-              <Field label="Phone Number" id="phone">
+              <Field label="Phone Number" id="phone" error={errors.phone?.message}>
                 <input id="phone" className="input-base" placeholder="+91 98765 43210" {...register("phone")} />
               </Field>
-              <Field label="Date of Birth" id="dob">
+              <Field label="Date of Birth" id="dob" error={errors.dob?.message}>
                 <input id="dob" type="date" className="input-base" {...register("dob")} />
               </Field>
               <Field label="Gender" id="gender">

@@ -186,47 +186,71 @@ export async function recordClockOut(
   const timeStr = now.toTimeString().slice(0, 5);
   const docId = `${employeeId}_${dateStr}`;
 
-  // Read existing doc to fetch break timings and existing status
+  // Read existing doc to fetch break timings, clockIn and existing status
+  let resolvedClockIn = clockInTime;
   let breakStart = "";
   let breakEnd = "";
   let currentStatus: AttendanceRecord["status"] = "Present";
-  try {
-    const existingSnap = await getDoc(doc(db, "attendance", docId));
-    if (existingSnap.exists()) {
-      const data = existingSnap.data();
-      breakStart = data.breakStart || "";
-      breakEnd = data.breakEnd || "";
-      if (data.status) currentStatus = data.status;
+
+  const existingSnap = await getDoc(doc(db, "attendance", docId));
+  if (existingSnap.exists()) {
+    const data = existingSnap.data();
+    if (!resolvedClockIn && data.clockIn) {
+      resolvedClockIn = data.clockIn;
     }
-  } catch {
-    // proceed with defaults
+    breakStart = data.breakStart || "";
+    breakEnd = data.breakEnd || "";
+    if (data.status) currentStatus = data.status;
+  }
+
+  if (!resolvedClockIn) {
+    throw new Error("Cannot clock out without an active clock-in.");
+  }
+
+  const inMins = parseTimeToMinutes(resolvedClockIn);
+  const outMins = parseTimeToMinutes(timeStr);
+  if (inMins === null || outMins === null) {
+    throw new Error("Invalid time format for clock-in or clock-out.");
+  }
+  if (outMins < inMins) {
+    throw new Error("Clock-out time cannot be earlier than clock-in time.");
+  }
+
+  // Auto-close break if employee is clocking out while still on break
+  let effectiveBreakEnd = breakEnd;
+  if (breakStart && !effectiveBreakEnd) {
+    effectiveBreakEnd = timeStr;
   }
 
   // Compute hours worked with break deducted
-  const hoursWorked = computeHoursWorked(clockInTime, timeStr, breakStart, breakEnd);
+  const hoursWorked = computeHoursWorked(resolvedClockIn, timeStr, breakStart, effectiveBreakEnd);
 
-  // Check short day (< 4 hours worked)
-  let updatedStatus = currentStatus;
+  // Calculate net worked minutes and transition status to completed state
+  let diff = outMins - inMins;
+  if (breakStart && effectiveBreakEnd) {
+    const bs = parseTimeToMinutes(breakStart);
+    const be = parseTimeToMinutes(effectiveBreakEnd);
+    if (bs !== null && be !== null && be > bs) {
+      diff = Math.max(0, diff - (be - bs));
+    }
+  }
+
+  let updatedStatus: AttendanceRecord["status"];
   let notes = "";
-  const inMins = parseTimeToMinutes(clockInTime);
-  const outMins = parseTimeToMinutes(timeStr);
-  if (inMins !== null && outMins !== null && outMins > inMins) {
-    let diff = outMins - inMins;
-    if (breakStart && breakEnd) {
-      const bs = parseTimeToMinutes(breakStart);
-      const be = parseTimeToMinutes(breakEnd);
-      if (bs !== null && be !== null && be > bs) diff = Math.max(0, diff - (be - bs));
-    }
-    if (diff < 240) {
-      updatedStatus = "Half Day";
-      notes = "Short day (< 4h worked)";
-    }
+  if (diff < 240) {
+    updatedStatus = "Half Day";
+    notes = "Short day (< 4h worked)";
+  } else if (inMins <= 9 * 60 + 15) {
+    updatedStatus = "Present";
+  } else {
+    updatedStatus = "Late";
   }
 
   await setDoc(
     doc(db, "attendance", docId),
     {
       clockOut: timeStr,
+      ...(breakStart ? { breakEnd: effectiveBreakEnd } : {}),
       hoursWorked,
       status: updatedStatus,
       ...(notes ? { notes } : {}),

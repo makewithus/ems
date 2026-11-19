@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, Check, CheckCheck, CalendarDays, DollarSign, ClipboardList, FolderOpen, Clock, Megaphone, Loader2 } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
@@ -24,9 +25,11 @@ type Notif = {
   message: string;
   time: string;
   read: boolean;
+  link?: string;
 };
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const { user, role } = useAuthStore();
   const isAdmin = role === "super_admin" || role === "hr_admin";
   const [notifs, setNotifs] = useState<Notif[]>([]);
@@ -55,6 +58,7 @@ export default function NotificationsPage() {
             message: data.message || "",
             time:    data.createdAt?.toDate?.()?.toISOString() || new Date().toISOString(),
             read:    !!data.isRead,
+            link:    data.link || (data.type === "leave" ? "/leaves" : data.type === "task" ? "/tasks/performance" : undefined),
           };
         });
 
@@ -75,6 +79,15 @@ export default function NotificationsPage() {
       await updateDoc(doc(db, "notifications", id), { isRead: true });
     } catch {
       toast.error("Failed to mark notification as read");
+    }
+  };
+
+  const handleNotificationClick = async (n: Notif) => {
+    if (!n.read) {
+      await markRead(n.id);
+    }
+    if (n.link) {
+      router.push(n.link);
     }
   };
 
@@ -133,7 +146,7 @@ export default function NotificationsPage() {
           {shown.map((n) => {
             const cfg = TYPE_CONFIG[n.type] || TYPE_CONFIG.general;
             return (
-              <div key={n.id} onClick={()=>markRead(n.id)} style={{ display:"flex", gap:14, padding:"16px 18px", background:n.read?"var(--bg-secondary)":"var(--bg-elevated)", border:`1px solid ${n.read?"var(--border)":"var(--border-strong)"}`, borderRadius:"var(--radius-sm)", cursor:"pointer", transition:"background 0.15s" }}>
+              <div key={n.id} onClick={()=>handleNotificationClick(n)} style={{ display:"flex", gap:14, padding:"16px 18px", background:n.read?"var(--bg-secondary)":"var(--bg-elevated)", border:`1px solid ${n.read?"var(--border)":"var(--border-strong)"}`, borderRadius:"var(--radius-sm)", cursor:"pointer", transition:"background 0.15s" }}>
                 <div style={{ width:38, height:38, borderRadius:"50%", background:cfg.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                   <cfg.icon size={17} color={cfg.color} />
                 </div>

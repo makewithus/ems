@@ -15,6 +15,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "sonner";
+import { reconcileAttendanceForDate } from "@/lib/attendanceService";
 
 const PIE_COLORS = [
   "var(--text-primary)",
@@ -46,6 +47,9 @@ export default function AdminDashboard() {
 
   /* ─── Live state ─── */
   const [employeeCount, setEmployeeCount] = useState(0);
+  const [rawEmployees, setRawEmployees]   = useState<any[]>([]);
+  const [todayAttendance, setTodayAttendance] = useState<any[]>([]);
+  const [approvedLeavesList, setApprovedLeavesList] = useState<any[]>([]);
   const [presentCount, setPresentCount]   = useState(0);
 
   const [documentCount, setDocumentCount] = useState(0);
@@ -64,14 +68,15 @@ export default function AdminDashboard() {
   useEffect(() => {
     const q = query(collection(db, "employees"), orderBy("createdAt", "asc"));
     const unsub = onSnapshot(q, (snap) => {
-      const allEmps = snap.docs.map((d) => d.data());
+      const allEmps = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setRawEmployees(allEmps);
       // Exclude archived employees so count reflects real active/inactive headcount
-      const activeEmps = allEmps.filter((e) => e.status !== "Archived");
+      const activeEmps = allEmps.filter((e: any) => e.status !== "Archived");
       setEmployeeCount(activeEmps.length);
 
       // Department breakdown (exclude archived)
       const deptMap: Record<string, number> = {};
-      activeEmps.forEach((e) => {
+      activeEmps.forEach((e: any) => {
         const dept = e.department || "Other";
         deptMap[dept] = (deptMap[dept] || 0) + 1;
       });
@@ -79,7 +84,7 @@ export default function AdminDashboard() {
 
       // Employee growth by month (from createdAt timestamps, exclude archived)
       const monthMap: Record<string, number> = {};
-      activeEmps.forEach((e) => {
+      activeEmps.forEach((e: any) => {
         if (!e.createdAt) return;
         const d = e.createdAt.toDate ? e.createdAt.toDate() : new Date(e.createdAt);
         const key = d.toLocaleString("default", { month: "short", year: "2-digit" });
@@ -98,7 +103,7 @@ export default function AdminDashboard() {
       const today = new Date();
       const weekEnd = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
       let bdays = 0;
-      activeEmps.forEach((e) => {
+      activeEmps.forEach((e: any) => {
         if (!e.dob) return;
         const dob = new Date(e.dob);
         const thisYearBday = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
@@ -111,18 +116,17 @@ export default function AdminDashboard() {
 
   /* ── Today's attendance stats ── */
   useEffect(() => {
-    const todayStr = new Date().toISOString().split("T")[0];
-    const q = query(collection(db, "attendance"), where("date", "==", todayStr));
+    const todayDateStr = new Date().toISOString().split("T")[0];
+    const q = query(collection(db, "attendance"), where("date", "==", todayDateStr));
     const unsub = onSnapshot(q, (snap) => {
+      const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setTodayAttendance(records);
       let present = 0;
       snap.docs.forEach((d) => {
         const s = d.data().status ?? "";
         if (s === "Present" || s === "Late") present++;
       });
       setPresentCount(present);
-      // Wait to set absent count until employeeCount is ready (done in render or we just use employeeCount state)
-      // Actually, since employeeCount might change independently, we should just calculate absentCount in render.
-      // But we can set the explicit absent count here if we want, or just update the UI later.
     }, () => {});
     return () => unsub();
   }, []);
@@ -146,30 +150,31 @@ export default function AdminDashboard() {
 
     const q = query(collection(db, "attendance"), where("date", "in", weekDates));
     const unsub = onSnapshot(q, (snap) => {
-      const dayMap: Record<string, { present: number; absent: number; late: number }> = {};
-      weekDates.forEach((dateStr) => {
-        dayMap[dateStr] = { present: 0, absent: 0, late: 0 };
+      const records = snap.docs.map((d) => d.data());
+      const result = weekDates.map((dateStr, i) => {
+        const recon = reconcileAttendanceForDate({
+          employees: rawEmployees,
+          attendanceRecords: records as any[],
+          approvedLeaves: approvedLeavesList,
+          dateStr,
+        });
+        return {
+          day: days[i],
+          present: recon.present,
+          absent: recon.absent,
+          late: recon.late,
+        };
       });
-      snap.docs.forEach((d) => {
-        const data = d.data();
-        const date = data.date;
-        if (!dayMap[date]) return;
-        if (data.status === "Present") dayMap[date].present++;
-        else if (data.status === "Late") { dayMap[date].present++; dayMap[date].late++; }
-        else if (data.status === "Absent") dayMap[date].absent++;
-      });
-      const result = weekDates.map((dateStr, i) => ({
-        day: days[i],
-        ...dayMap[dateStr],
-      }));
       setAttendanceData(result);
     }, () => {});
     return () => unsub();
-  }, []);
+  }, [rawEmployees, approvedLeavesList]);
 
-  /* ── Leave type distribution ── */
+  /* ── Leave type distribution & approved leaves ── */
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "leaveRequests"), (snap) => {
+      const allLeaves = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setApprovedLeavesList(allLeaves.filter((l: any) => l.status === "Approved"));
       const typeMap: Record<string, number> = {};
       snap.docs.forEach((d) => {
         const t = d.data().leaveType ?? "Other";
@@ -281,9 +286,25 @@ export default function AdminDashboard() {
     return `₹${n}`;
   };
 
+  const todayStr = new Date().toISOString().split("T")[0];
+  const todayReconciliation = reconcileAttendanceForDate({
+    employees: rawEmployees,
+    attendanceRecords: todayAttendance,
+    approvedLeaves: approvedLeavesList,
+    dateStr: todayStr,
+  });
+
   const STATS = [
     { label: "Total Employees",     value: String(employeeCount || 0), icon: Users,       color: "var(--accent-blue)",   delta: "Active & inactive employees" },
-    { label: "Today's Attendance",  value: `${presentCount}/${employeeCount || 1}`,     icon: Clock,       color: "var(--accent-green)",  delta: `${Math.max(0, employeeCount - presentCount)} absent or pending` },
+    {
+      label: "Today's Attendance",
+      value: `${todayReconciliation.totalPresent}/${todayReconciliation.totalHeadcount || employeeCount || 1}`,
+      icon: Clock,
+      color: "var(--accent-green)",
+      delta: todayReconciliation.onLeave > 0
+        ? `${todayReconciliation.absent} absent, ${todayReconciliation.onLeave} on leave`
+        : `${todayReconciliation.absent} absent or pending`,
+    },
     { label: "Pending Leaves",      value: String(pendingLeaves.length || 0), icon: CalendarDays, color: "var(--accent-amber)",  delta: "Requires HR approval" },
     { label: "Payroll This Month",  value: payrollTotal > 0 ? formatPayroll(payrollTotal) : "—", icon: DollarSign, color: "var(--accent-purple)", delta: new Date().toLocaleString("default", { month: "long" }) },
     { label: "Documents",           value: String(documentCount || 0),  icon: FolderOpen,  color: "var(--accent-blue)",   delta: "Total files" },

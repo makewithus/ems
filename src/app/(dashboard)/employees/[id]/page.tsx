@@ -37,7 +37,6 @@ type Emp = {
   salary: number;
   salaryDate: string;
   status: string;
-  password?: string;
   profileCompletion?: number;
   companyId?: string;
 };
@@ -64,6 +63,30 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
     setPassError("");
     if (!form.firstName.trim() || !form.lastName.trim()) {
       toast.error("First and last name are required"); return;
+    }
+    if (!/^[\p{L}\s'-]+$/u.test(form.firstName.trim())) {
+      toast.error("First name must contain letters only"); return;
+    }
+    if (!/^[\p{L}\s'-]+$/u.test(form.lastName.trim())) {
+      toast.error("Last name must contain letters only"); return;
+    }
+
+    if (form.phone && form.phone.trim()) {
+      if (/[a-zA-Z]/.test(form.phone)) {
+        toast.error("Phone number must contain digits only"); return;
+      }
+      const cleaned = form.phone.replace(/[\s\-()]/g, "");
+      if (!/^(\+?\d{7,15})$/.test(cleaned)) {
+        toast.error("Please enter a valid phone number (7-15 digits)"); return;
+      }
+    }
+
+    if (form.dob && form.dob.trim()) {
+      const d = new Date(form.dob + "T00:00:00");
+      const now = new Date(); now.setHours(0, 0, 0, 0);
+      if (isNaN(d.getTime()) || d >= now) {
+        toast.error("Date of birth must be a valid past date"); return;
+      }
     }
 
     if (newPassword.trim() !== "") {
@@ -134,7 +157,6 @@ function EditModal({ emp, onClose, onSaved }: { emp: Emp; onClose: () => void; o
       onSaved({
         ...form,
         email: updatedEmail,
-        password: form.password || emp.password || "",
       });
       onClose();
     } catch (err: unknown) {
@@ -845,7 +867,6 @@ export default function EmployeeProfilePage() {
           salary:         d.salary         ?? 0,
           salaryDate:     d.salaryDate     ?? "",
           status:         d.status         ?? "Active",
-          password:       d.password       ?? "",
           profileCompletion: d.profileCompletion ?? 0,
           companyId:      d.companyId      ?? "",
         });

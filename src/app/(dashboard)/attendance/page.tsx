@@ -11,6 +11,7 @@ import { formatDate, fmt24to12, computeHoursWorked } from "@/lib/utils";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query, where, QuerySnapshot, DocumentData } from "firebase/firestore";
 import { useDepartments } from "@/hooks/useDepartments";
+import { reconcileAttendanceForDate, AttendanceReconciliation } from "@/lib/attendanceService";
 import {
   useAttendanceByDate,
   useEmployeeAttendance,
@@ -47,6 +48,8 @@ export default function AttendancePage() {
   const [quickGlance, setQuickGlance] = useState<{ employeeId: string; employeeName: string } | null>(null);
   const [totalHeadcount, setTotalHeadcount] = useState(0);
   const [onLeaveCount, setOnLeaveCount] = useState(0);
+  const [employeesList, setEmployeesList] = useState<any[]>([]);
+  const [leavesList, setLeavesList] = useState<any[]>([]);
   const { departments } = useDepartments();
   const today = formatDate(new Date().toISOString());
   const todayStr = new Date().toISOString().split("T")[0];
@@ -54,7 +57,9 @@ export default function AttendancePage() {
   useEffect(() => {
     if (!isAdmin) return;
     const unsub = onSnapshot(collection(db, "employees"), (snap) => {
-      const active = snap.docs.filter((d) => d.data().status === "Active");
+      const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setEmployeesList(all);
+      const active = all.filter((d: any) => d.status === "Active");
       setTotalHeadcount(active.length);
     });
     return () => unsub();
@@ -67,9 +72,10 @@ export default function AttendancePage() {
       where("status", "==", "Approved")
     );
     const unsub = onSnapshot(qLeaves, (snap: QuerySnapshot<DocumentData>) => {
+      const leaves = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
+      setLeavesList(leaves);
       const activeLeaves = new Set<string>();
-      snap.docs.forEach((d: DocumentData) => {
-        const data = d.data();
+      leaves.forEach((data: any) => {
         const start = data.startDate;
         const end = data.endDate;
         if (start && end && selectedDate >= start && selectedDate <= end) {
@@ -105,19 +111,23 @@ export default function AttendancePage() {
     (r) => dept === "All" || r.department === dept
   );
 
-  const presentOnly = filteredAdmin.filter((r) => r.status === "Present").length;
-  const lateOnly    = filteredAdmin.filter((r) => r.status === "Late").length;
-  const halfDayOnly = filteredAdmin.filter((r) => r.status === "Half Day").length;
-  const loggedCount = presentOnly + lateOnly + halfDayOnly;
-  const eligibleWorkforce = Math.max(0, totalHeadcount - onLeaveCount);
-  const absentCount = totalHeadcount > 0 ? Math.max(0, eligibleWorkforce - loggedCount) : filteredAdmin.filter((r) => r.status === "Absent").length;
+  const reconciliation = useMemo(() => {
+    const filteredEmps = dept === "All" ? employeesList : employeesList.filter((e) => e.department === dept);
+    return reconcileAttendanceForDate({
+      employees: filteredEmps,
+      attendanceRecords: filteredAdmin,
+      approvedLeaves: leavesList,
+      dateStr: selectedDate,
+    });
+  }, [employeesList, filteredAdmin, leavesList, selectedDate, dept]);
 
   const stats = {
-    Present:    presentOnly,
-    Late:       lateOnly,
-    "Half Day": halfDayOnly,
-    "On Leave": onLeaveCount,
-    Absent:     absentCount,
+    Present:      reconciliation.present,
+    Late:         reconciliation.late,
+    "Half Day":   reconciliation.halfDay,
+    "On Leave":   reconciliation.onLeave,
+    Absent:       reconciliation.absent,
+    "Weekly Off": reconciliation.weeklyOff,
   };
 
   const handleClockIn = async () => {
@@ -361,11 +371,12 @@ export default function AttendancePage() {
             <>
               <div className="att-stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 14, marginBottom: 20 }}>
                 {[
-                  { label: "Present",  value: stats.Present,     color: "var(--accent-green)" },
-                  { label: "Late",     value: stats.Late,        color: "var(--accent-amber)" },
-                  { label: "Half Day", value: stats["Half Day"], color: "var(--accent-purple)" },
-                  { label: "On Leave", value: stats["On Leave"], color: "#3B82F6" },
-                  { label: "Absent",   value: stats.Absent,      color: "var(--accent-red)" },
+                  { label: "Present",    value: stats.Present,       color: "var(--accent-green)" },
+                  { label: "Late",       value: stats.Late,          color: "var(--accent-amber)" },
+                  { label: "Half Day",   value: stats["Half Day"],   color: "var(--accent-purple)" },
+                  { label: "On Leave",   value: stats["On Leave"],   color: "#3B82F6" },
+                  { label: "Absent",     value: stats.Absent,        color: "var(--accent-red)" },
+                  ...(stats["Weekly Off"] > 0 ? [{ label: "Weekly Off", value: stats["Weekly Off"], color: "var(--text-muted)" }] : []),
                 ].map((s) => (
                   <div key={s.label} className="card" style={{ padding: "14px 18px" }}>
                     <div style={{ fontSize: 24, fontWeight: 700, color: s.color, marginBottom: 4 }}>{s.value}</div>

@@ -18,8 +18,11 @@ const schema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate:   z.string().min(1, "End date is required"),
   reason:    z.string().min(1, "Please provide a reason"),
-}).refine((d) => new Date(d.endDate) >= new Date(d.startDate), {
-  message: "End date cannot be earlier than start date",
+}).refine((d) => {
+  if (!d.startDate || !d.endDate) return true;
+  return d.endDate >= d.startDate;
+}, {
+  message: "End date cannot be earlier than start date.",
   path: ["endDate"],
 });
 type FormData = z.infer<typeof schema>;
@@ -49,6 +52,9 @@ type LeaveRow = {
   dept: string;
   reason?: string;
   employeeId?: string;
+  rawStartDate?: string;
+  rawEndDate?: string;
+  rawCreatedAt?: any;
 };
 
 const TABS = ["All", "Pending", "Approved", "Rejected", "Cancelled"];
@@ -95,13 +101,15 @@ export default function LeavesPage() {
               type:       data.leaveType   ?? "",
               start:      start ? new Date(start).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
               end:        end   ? new Date(end  ).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
+              rawStartDate: start,
+              rawEndDate:   end,
               days:       data.days        ?? 1,
               status:     data.status      ?? "Pending",
               dept:       data.department  ?? "",
               reason:     data.reason      ?? "",
               employeeId: data.employeeId  ?? "",
               rawCreatedAt: data.createdAt,
-            } as any;
+            };
           });
           if (!isAdmin) {
             rows.sort((a: any, b: any) => {
@@ -127,8 +135,25 @@ export default function LeavesPage() {
 
   /* ── Submit leave (employee) — writes to Firestore ── */
   const onSubmit = async (data: FormData) => {
-    if (new Date(data.endDate) < new Date(data.startDate)) {
-      toast.error("End date cannot be earlier than start date");
+    if (data.endDate < data.startDate) {
+      toast.error("End date cannot be earlier than start date.");
+      return;
+    }
+
+    const empId = profile?.employeeId ?? "unknown";
+
+    // Duplicate submission & overlapping date range prevention
+    const hasDuplicateOrOverlap = requests.some(
+      (r) =>
+        r.employeeId === empId &&
+        (r.status === "Pending" || r.status === "Approved") &&
+        r.rawStartDate &&
+        r.rawEndDate &&
+        !(data.endDate < r.rawStartDate || data.startDate > r.rawEndDate)
+    );
+
+    if (hasDuplicateOrOverlap) {
+      toast.error("You already have an active or pending leave request covering these dates.");
       return;
     }
 
@@ -139,7 +164,7 @@ export default function LeavesPage() {
 
     try {
       await addDoc(collection(db, "leaveRequests"), {
-        employeeId:   profile?.employeeId ?? "unknown",
+        employeeId:   empId,
         employeeName: profile?.displayName ?? "Employee",
         leaveType:    data.leaveType,
         startDate:    data.startDate,
@@ -152,19 +177,47 @@ export default function LeavesPage() {
       });
 
       // Dispatch notification to admins (fixes A-39)
-      await addDoc(collection(db, "notifications"), {
-        companyId: profile?.companyId ?? "default",
-        userId: "admin",
-        senderUid: user?.uid ?? profile?.uid,
-        createdBy: user?.uid ?? profile?.uid,
-        targetRole: "admin",
-        title: "New Leave Request Submitted",
-        message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
-        type: "leave",
-        isRead: false,
-        link: "/leaves",
-        createdAt: serverTimestamp(),
-      }).catch(() => {});
+      try {
+        const { getDocs } = await import("firebase/firestore");
+        const adminSnap = await getDocs(
+          query(collection(db, "users"), where("role", "in", ["super_admin", "hr_admin"]))
+        );
+        const adminUids = adminSnap.docs.map((d) => d.id);
+        if (adminUids.length === 0) adminUids.push("admin");
+        
+        await Promise.allSettled(
+          adminUids.map((adId) =>
+            addDoc(collection(db, "notifications"), {
+              companyId: profile?.companyId ?? "default",
+              userId: adId,
+              senderUid: user?.uid ?? profile?.uid,
+              createdBy: user?.uid ?? profile?.uid,
+              targetRole: "admin",
+              title: "New Leave Request Submitted",
+              message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
+              type: "leave",
+              isRead: false,
+              link: "/leaves",
+              createdAt: serverTimestamp(),
+            })
+          )
+        );
+      } catch {
+        // Fallback to broadcast admin notification
+        await addDoc(collection(db, "notifications"), {
+          companyId: profile?.companyId ?? "default",
+          userId: "admin",
+          senderUid: user?.uid ?? profile?.uid,
+          createdBy: user?.uid ?? profile?.uid,
+          targetRole: "admin",
+          title: "New Leave Request Submitted",
+          message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
+          type: "leave",
+          isRead: false,
+          link: "/leaves",
+          createdAt: serverTimestamp(),
+        }).catch(() => {});
+      }
 
       toast.success("Leave request submitted successfully!");
       reset();
@@ -302,10 +355,12 @@ export default function LeavesPage() {
               <div>
                 <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Start Date</label>
                 <input id="leave-start" type="date" className="input-base" {...register("startDate")} />
+                {errors.startDate && <p id="leave-start-error" style={{ fontSize: 12, color: "var(--accent-red)", marginTop: 4 }}>{errors.startDate.message}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>End Date</label>
                 <input id="leave-end" type="date" className="input-base" {...register("endDate")} />
+                {errors.endDate && <p id="leave-end-error" style={{ fontSize: 12, color: "var(--accent-red)", marginTop: 4 }}>{errors.endDate.message}</p>}
               </div>
               <div style={{ gridColumn: "1/-1" }}>
                 <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Reason</label>

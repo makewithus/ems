@@ -31,7 +31,6 @@ type EmpRow = {
   joiningDate: string;
   salary: number;
   uid: string;
-  password: string;
   profileCompletion?: number;
 };
 
@@ -429,7 +428,6 @@ export default function EmployeesPage() {
             joiningDate: data.joiningDate ?? "",
             salary:      data.salary      ?? 0,
             uid:         data.uid         ?? "",
-            password:    data.password    ?? "",
             profileCompletion: data.profileCompletion ?? 0,
           };
         });
