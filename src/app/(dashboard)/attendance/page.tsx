@@ -286,20 +286,25 @@ export default function AttendancePage() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Date</th><th>Clock In</th><th>Clock Out</th><th>Break</th><th>Hours</th><th>Status</th>
+                      <th style={{ whiteSpace: "nowrap" }}>Date</th>
+                      <th style={{ whiteSpace: "nowrap" }}>Clock In</th>
+                      <th style={{ whiteSpace: "nowrap" }}>Clock Out</th>
+                      <th style={{ whiteSpace: "nowrap" }}>Break</th>
+                      <th style={{ whiteSpace: "nowrap" }}>Hours</th>
+                      <th style={{ whiteSpace: "nowrap" }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {empRecords.slice(0, 30).map((r) => (
                       <tr key={r.id}>
-                        <td style={{ fontSize: 13 }}>{r.date ? formatDate(r.date) : "—"}</td>
-                        <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500 }}>
+                        <td style={{ fontSize: 13, whiteSpace: "nowrap" }}>{r.date ? formatDate(r.date) : "—"}</td>
+                        <td style={{ fontSize: 13, color: "var(--accent-green)", fontWeight: 500, whiteSpace: "nowrap" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                             <Clock size={12} />{r.clockIn ? fmt24to12(r.clockIn) : "—"}
                           </div>
                         </td>
-                        <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
-                        <td style={{ fontSize: 13, color: "var(--accent-amber)" }}>
+                        <td style={{ fontSize: 13, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{r.clockOut ? fmt24to12(r.clockOut) : "—"}</td>
+                        <td style={{ fontSize: 13, color: "var(--accent-amber)", whiteSpace: "nowrap" }}>
                           {r.breakStart ? fmt24to12(r.breakStart) : "—"}
                           {r.breakEnd ? ` – ${fmt24to12(r.breakEnd)}` : ""}
                         </td>

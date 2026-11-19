@@ -48,6 +48,7 @@ import { formatDate, formatDateTime, timeAgo, formatDeadlineHealth, isValidUrl }
 import {
   calculateEmployeeWorkloads,
   calculateProgress,
+  normalizeTaskStatus,
   isTaskCompleted,
   isTaskUnderReview,
   isTaskInProgress,
@@ -1118,20 +1119,20 @@ export default function TeamPerformancePage() {
 
           {/* Table */}
           {!loading && (
-            <div className="table-container" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius)" }}>
-              <table>
+            <div className="table-container" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1000 }}>
                 <thead>
-                  <tr>
-                    <th style={{ minWidth: 220 }}>Employee</th>
-                    <th style={{ textAlign: "center" }}>Total Tasks</th>
-                    <th style={{ textAlign: "center", color: "var(--accent-green)" }}>Completed</th>
-                    <th style={{ textAlign: "center", color: "var(--accent-blue)" }}>In Progress</th>
-                    <th style={{ textAlign: "center", color: "var(--accent-amber)" }}>Under Review</th>
-                    <th style={{ textAlign: "center" }}>Pending</th>
-                    <th style={{ textAlign: "center", color: "var(--accent-red)" }}>Overdue</th>
-                    <th style={{ minWidth: 160 }}>Individual Progress</th>
-                    <th>Workload Status</th>
-                    <th style={{ textAlign: "right" }}>Actions</th>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th style={{ minWidth: 220, padding: "12px 16px" }}>Employee</th>
+                    <th style={{ textAlign: "center", minWidth: 85, padding: "12px 12px" }}>Total Tasks</th>
+                    <th style={{ textAlign: "center", minWidth: 85, color: "var(--accent-green)", padding: "12px 12px" }}>Completed</th>
+                    <th style={{ textAlign: "center", minWidth: 90, color: "var(--accent-blue)", padding: "12px 12px" }}>In Progress</th>
+                    <th style={{ textAlign: "center", minWidth: 95, color: "var(--accent-amber)", padding: "12px 12px" }}>Under Review</th>
+                    <th style={{ textAlign: "center", minWidth: 80, padding: "12px 12px" }}>Pending</th>
+                    <th style={{ textAlign: "center", minWidth: 80, color: "var(--accent-red)", padding: "12px 12px" }}>Overdue</th>
+                    <th style={{ minWidth: 160, padding: "12px 16px" }}>Individual Progress</th>
+                    <th style={{ minWidth: 140, padding: "12px 16px" }}>Workload Status</th>
+                    <th style={{ textAlign: "right", minWidth: 120, padding: "12px 16px" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1514,17 +1515,17 @@ export default function TeamPerformancePage() {
               <p style={{ fontSize: 12 }}>No employee tasks are currently waiting for admin review.</p>
             </div>
           ) : (
-            <div className="table-container" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius)" }}>
-              <table>
+            <div className="table-container" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1040 }}>
                 <thead>
-                  <tr>
-                    <th style={{ minWidth: 220 }}>Task</th>
-                    <th style={{ minWidth: 150 }}>Assignee</th>
-                    <th style={{ textAlign: "center", minWidth: 90 }}>Priority</th>
-                    <th style={{ minWidth: 120 }}>Deadline</th>
-                    <th style={{ minWidth: 130 }}>Submitted At</th>
-                    <th style={{ minWidth: 240 }}>Submission Notes & Proof</th>
-                    <th style={{ textAlign: "right", minWidth: 200 }}>Actions</th>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th style={{ minWidth: 220, maxWidth: 320, padding: "12px 16px" }}>Task</th>
+                    <th style={{ minWidth: 165, whiteSpace: "nowrap", padding: "12px 16px" }}>Assignee</th>
+                    <th style={{ textAlign: "center", minWidth: 95, whiteSpace: "nowrap", padding: "12px 16px" }}>Priority</th>
+                    <th style={{ minWidth: 155, whiteSpace: "nowrap", padding: "12px 16px" }}>Deadline</th>
+                    <th style={{ minWidth: 160, whiteSpace: "nowrap", padding: "12px 16px" }}>Submitted At</th>
+                    <th style={{ minWidth: 220, padding: "12px 16px" }}>Submission Notes & Proof</th>
+                    <th style={{ textAlign: "right", minWidth: 180, whiteSpace: "nowrap", padding: "12px 16px" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1533,46 +1534,57 @@ export default function TeamPerformancePage() {
                     const empData = employees.find((e) => e.uid === t.assigneeId || e.uid === t.assignedTo);
 
                     return (
-                      <tr key={t.id}>
+                      <tr key={t.id} style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.06)", transition: "background 0.15s ease" }}>
                         {/* Task Title & Desc */}
-                        <td>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)", marginBottom: 3 }}>
+                        <td style={{ padding: "13px 16px", verticalAlign: "middle" }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)", marginBottom: 3, lineHeight: 1.3 }}>
                             {t.title}
                           </div>
                           {t.desc && (
-                            <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4, maxWidth: 300 }}>
+                            <div
+                              style={{
+                                fontSize: 11.5,
+                                color: "var(--text-secondary)",
+                                lineHeight: 1.4,
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                                maxWidth: 320,
+                              }}
+                            >
                               {t.desc}
                             </div>
                           )}
                         </td>
 
                         {/* Assignee */}
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <td style={{ padding: "13px 16px", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                             <div
                               style={{
-                                width: 26,
-                                height: 26,
+                                width: 28,
+                                height: 28,
                                 borderRadius: "50%",
                                 background: "rgba(255, 255, 255, 0.08)",
-                                border: "1px solid var(--border)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontWeight: 700,
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 color: "var(--text-primary)",
                                 flexShrink: 0,
                               }}
                             >
                               {(t.assigneeName || "U").slice(0, 2).toUpperCase()}
                             </div>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text-primary)" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text-primary)", whiteSpace: "nowrap" }}>
                                 {t.assigneeName || "Unassigned"}
                               </div>
                               {empData?.employeeId && (
-                                <div style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
+                                <div style={{ fontSize: 10.5, color: "var(--text-muted)", fontFamily: "monospace", letterSpacing: "0.02em" }}>
                                   {empData.employeeId}
                                 </div>
                               )}
@@ -1581,24 +1593,44 @@ export default function TeamPerformancePage() {
                         </td>
 
                         {/* Priority */}
-                        <td style={{ textAlign: "center" }}>
+                        <td style={{ padding: "13px 16px", textAlign: "center", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                           <span
                             className="badge"
                             style={{
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              letterSpacing: "0.03em",
+                              minWidth: 76,
+                              display: "inline-flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              padding: "3px 9px",
+                              borderRadius: 6,
+                              whiteSpace: "nowrap",
                               background:
                                 t.priority === "Urgent" || t.priority === "Critical"
                                   ? "rgba(239, 68, 68, 0.15)"
                                   : t.priority === "High"
                                   ? "rgba(245, 158, 11, 0.15)"
-                                  : "rgba(59, 130, 246, 0.12)",
+                                  : t.priority === "Medium"
+                                  ? "rgba(59, 130, 246, 0.15)"
+                                  : "rgba(255, 255, 255, 0.06)",
                               color:
                                 t.priority === "Urgent" || t.priority === "Critical"
                                   ? "var(--accent-red)"
                                   : t.priority === "High"
                                   ? "var(--accent-amber)"
-                                  : "var(--accent-blue)",
-                              fontSize: 10.5,
-                              fontWeight: 700,
+                                  : t.priority === "Medium"
+                                  ? "var(--accent-blue)"
+                                  : "var(--text-secondary)",
+                              border:
+                                t.priority === "Urgent" || t.priority === "Critical"
+                                  ? "1px solid rgba(239, 68, 68, 0.3)"
+                                  : t.priority === "High"
+                                  ? "1px solid rgba(245, 158, 11, 0.3)"
+                                  : t.priority === "Medium"
+                                  ? "1px solid rgba(59, 130, 246, 0.3)"
+                                  : "1px solid rgba(255, 255, 255, 0.1)",
                             }}
                           >
                             {t.priority}
@@ -1606,13 +1638,30 @@ export default function TeamPerformancePage() {
                         </td>
 
                         {/* Deadline */}
-                        <td style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                          {t.deadline ? formatDate(t.deadline) : "—"}
+                        <td style={{ padding: "13px 16px", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontSize: 12.5,
+                              whiteSpace: "nowrap",
+                              padding: "4px 9px",
+                              borderRadius: 6,
+                              background: "rgba(255, 255, 255, 0.04)",
+                              border: "1px solid rgba(255, 255, 255, 0.08)",
+                              fontWeight: 500,
+                              color: "var(--text-primary)",
+                            }}
+                          >
+                            <Calendar size={13} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                            <span style={{ whiteSpace: "nowrap" }}>{t.deadline ? formatDate(t.deadline) : "—"}</span>
+                          </div>
                         </td>
 
                         {/* Submitted At & Delayed Flag */}
-                        <td>
-                          <div style={{ fontSize: 12 }}>
+                        <td style={{ padding: "13px 16px", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                          <div style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500, whiteSpace: "nowrap" }}>
                             {t.submittedAt ? formatDateTime(toDateObj(t.submittedAt)) : "Recently"}
                           </div>
                           {delayed && (
@@ -1621,13 +1670,19 @@ export default function TeamPerformancePage() {
                               style={{
                                 background: "rgba(239, 68, 68, 0.15)",
                                 color: "var(--accent-red)",
+                                border: "1px solid rgba(239, 68, 68, 0.3)",
                                 fontSize: 9.5,
                                 fontWeight: 700,
                                 marginTop: 4,
-                                display: "inline-block",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 3,
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                                whiteSpace: "nowrap",
                               }}
                             >
-                              Delayed Submission
+                              <AlertTriangle size={10} /> Delayed Submission
                             </span>
                           )}
                         </td>
@@ -1746,17 +1801,17 @@ export default function TeamPerformancePage() {
               <p style={{ fontSize: 12 }}>All assigned tasks are on track and completed on schedule.</p>
             </div>
           ) : (
-            <div className="table-container" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius)" }}>
-              <table>
+            <div className="table-container" style={{ background: "var(--bg-secondary)", borderRadius: "var(--radius)", border: "1px solid var(--border)", overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1040 }}>
                 <thead>
-                  <tr>
-                    <th style={{ minWidth: 260 }}>Task</th>
-                    <th style={{ minWidth: 160 }}>Assignee</th>
-                    <th style={{ textAlign: "center", minWidth: 100 }}>Priority</th>
-                    <th style={{ minWidth: 130 }}>Deadline</th>
-                    <th style={{ textAlign: "center", minWidth: 130 }}>Status</th>
-                    <th style={{ minWidth: 170 }}>Time Health</th>
-                    <th style={{ textAlign: "right", minWidth: 140 }}>Actions</th>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th style={{ minWidth: 240, maxWidth: 360, padding: "12px 16px" }}>Task</th>
+                    <th style={{ minWidth: 165, whiteSpace: "nowrap", padding: "12px 16px" }}>Assignee</th>
+                    <th style={{ textAlign: "center", minWidth: 95, whiteSpace: "nowrap", padding: "12px 16px" }}>Priority</th>
+                    <th style={{ minWidth: 155, whiteSpace: "nowrap", padding: "12px 16px" }}>Deadline</th>
+                    <th style={{ textAlign: "center", minWidth: 135, whiteSpace: "nowrap", padding: "12px 16px" }}>Status</th>
+                    <th style={{ minWidth: 175, whiteSpace: "nowrap", padding: "12px 16px" }}>Time Health</th>
+                    <th style={{ textAlign: "right", minWidth: 125, whiteSpace: "nowrap", padding: "12px 16px" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1774,49 +1829,61 @@ export default function TeamPerformancePage() {
                       <tr
                         key={t.id}
                         style={{
-                          background: overdue ? "rgba(239, 68, 68, 0.04)" : undefined,
-                          transition: "background 0.15s",
+                          background: overdue ? "rgba(239, 68, 68, 0.03)" : undefined,
+                          borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                          transition: "background 0.15s ease",
                         }}
                       >
                         {/* Task Title & Description */}
-                        <td>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)", marginBottom: 3 }}>
+                        <td style={{ padding: "13px 16px", verticalAlign: "middle" }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)", marginBottom: 3, lineHeight: 1.3 }}>
                             {t.title}
                           </div>
                           {t.desc && (
-                            <div style={{ fontSize: 11.5, color: "var(--text-secondary)", lineHeight: 1.4, maxWidth: 380 }}>
+                            <div
+                              style={{
+                                fontSize: 11.5,
+                                color: "var(--text-secondary)",
+                                lineHeight: 1.4,
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                                maxWidth: 360,
+                              }}
+                            >
                               {t.desc}
                             </div>
                           )}
                         </td>
 
                         {/* Assignee with Avatar & ID */}
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <td style={{ padding: "13px 16px", whiteSpace: "nowrap", verticalAlign: "middle" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                             <div
                               style={{
-                                width: 26,
-                                height: 26,
+                                width: 28,
+                                height: 28,
                                 borderRadius: "50%",
                                 background: "rgba(255, 255, 255, 0.08)",
-                                border: "1px solid var(--border)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
                                 fontWeight: 700,
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 color: "var(--text-primary)",
                                 flexShrink: 0,
                               }}
                             >
                               {(t.assigneeName || "U").slice(0, 2).toUpperCase()}
                             </div>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text-primary)" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                              <div style={{ fontWeight: 600, fontSize: 12.5, color: "var(--text-primary)", whiteSpace: "nowrap" }}>
                                 {t.assigneeName || "Unassigned"}
                               </div>
                               {empData?.employeeId && (
-                                <div style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
+                                <div style={{ fontSize: 10.5, color: "var(--text-muted)", fontFamily: "monospace", letterSpacing: "0.02em" }}>
                                   {empData.employeeId}
                                 </div>
                               )}
@@ -1825,12 +1892,20 @@ export default function TeamPerformancePage() {
                         </td>
 
                         {/* Priority Badge */}
-                        <td style={{ textAlign: "center" }}>
+                        <td style={{ padding: "13px 16px", textAlign: "center", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                           <span
                             className="badge"
                             style={{
                               fontSize: 10.5,
-                              fontWeight: 600,
+                              fontWeight: 700,
+                              letterSpacing: "0.03em",
+                              minWidth: 76,
+                              display: "inline-flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              padding: "3px 9px",
+                              borderRadius: 6,
+                              whiteSpace: "nowrap",
                               background:
                                 t.priority === "Urgent" || t.priority === "Critical"
                                   ? "rgba(239, 68, 68, 0.15)"
@@ -1854,32 +1929,37 @@ export default function TeamPerformancePage() {
                                   ? "1px solid rgba(245, 158, 11, 0.3)"
                                   : t.priority === "Medium"
                                   ? "1px solid rgba(59, 130, 246, 0.3)"
-                                  : "1px solid var(--border)",
+                                  : "1px solid rgba(255, 255, 255, 0.1)",
                             }}
                           >
                             {t.priority}
                           </span>
                         </td>
 
-                        {/* Deadline */}
-                        <td>
+                        {/* Deadline (Non-wrapping, enclosed, legible) */}
+                        <td style={{ padding: "13px 16px", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                           <div
                             style={{
                               display: "inline-flex",
                               alignItems: "center",
                               gap: 6,
                               fontSize: 12.5,
+                              whiteSpace: "nowrap",
+                              padding: "4px 9px",
+                              borderRadius: 6,
+                              background: overdue ? "rgba(239, 68, 68, 0.08)" : "rgba(255, 255, 255, 0.04)",
+                              border: overdue ? "1px solid rgba(239, 68, 68, 0.25)" : "1px solid rgba(255, 255, 255, 0.08)",
                               fontWeight: overdue ? 700 : 500,
                               color: overdue ? "var(--accent-red)" : "var(--text-primary)",
                             }}
                           >
-                            <Calendar size={13} style={{ color: overdue ? "var(--accent-red)" : "var(--text-muted)" }} />
-                            <span>{t.deadline ? formatDate(t.deadline) : "—"}</span>
+                            <Calendar size={13} style={{ color: overdue ? "var(--accent-red)" : "var(--text-muted)", flexShrink: 0 }} />
+                            <span style={{ whiteSpace: "nowrap" }}>{t.deadline ? formatDate(t.deadline) : "—"}</span>
                           </div>
                         </td>
 
                         {/* Status Badge */}
-                        <td style={{ textAlign: "center" }}>
+                        <td style={{ padding: "13px 16px", textAlign: "center", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                           <span
                             className="badge"
                             style={{
@@ -1887,48 +1967,51 @@ export default function TeamPerformancePage() {
                               fontWeight: 600,
                               display: "inline-flex",
                               alignItems: "center",
-                              gap: 4,
+                              gap: 4.5,
+                              padding: "3px 9px",
+                              borderRadius: 6,
+                              whiteSpace: "nowrap",
                               background:
-                                t.status === "Completed"
+                                isTaskCompleted(t.status)
                                   ? "rgba(34, 197, 94, 0.15)"
-                                  : t.status === "Under Review"
+                                  : isTaskUnderReview(t.status)
                                   ? "rgba(245, 158, 11, 0.15)"
-                                  : t.status === "In Progress"
+                                  : isTaskInProgress(t.status)
                                   ? "rgba(59, 130, 246, 0.15)"
                                   : "rgba(255, 255, 255, 0.06)",
                               color:
-                                t.status === "Completed"
+                                isTaskCompleted(t.status)
                                   ? "var(--accent-green)"
-                                  : t.status === "Under Review"
+                                  : isTaskUnderReview(t.status)
                                   ? "var(--accent-amber)"
-                                  : t.status === "In Progress"
+                                  : isTaskInProgress(t.status)
                                   ? "var(--accent-blue)"
                                   : "var(--text-secondary)",
                               border:
-                                t.status === "Completed"
+                                isTaskCompleted(t.status)
                                   ? "1px solid rgba(34, 197, 94, 0.3)"
-                                  : t.status === "Under Review"
+                                  : isTaskUnderReview(t.status)
                                   ? "1px solid rgba(245, 158, 11, 0.3)"
-                                  : t.status === "In Progress"
+                                  : isTaskInProgress(t.status)
                                   ? "1px solid rgba(59, 130, 246, 0.3)"
                                   : "1px solid var(--border)",
                             }}
                           >
-                            {t.status === "Completed" ? (
+                            {isTaskCompleted(t.status) ? (
                               <CheckCircle2 size={11} />
-                            ) : t.status === "Under Review" ? (
+                            ) : isTaskUnderReview(t.status) ? (
                               <FileCheck2 size={11} />
-                            ) : t.status === "In Progress" ? (
+                            ) : isTaskInProgress(t.status) ? (
                               <Clock size={11} />
                             ) : (
                               <Hourglass size={11} />
                             )}
-                            <span>{t.status}</span>
+                            <span>{normalizeTaskStatus(t.status)}</span>
                           </span>
                         </td>
 
                         {/* Time Health (Clean relative status) */}
-                        <td>
+                        <td style={{ padding: "13px 16px", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                           {(() => {
                             if (!health) {
                               return <span style={{ color: "var(--text-muted)", fontSize: 12 }}>No deadline</span>;
@@ -1941,11 +2024,14 @@ export default function TeamPerformancePage() {
                                     display: "inline-flex",
                                     alignItems: "center",
                                     gap: 5,
-                                    background: "rgba(239, 68, 68, 0.15)",
+                                    whiteSpace: "nowrap",
+                                    background: "rgba(239, 68, 68, 0.12)",
                                     color: "var(--accent-red)",
-                                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                                    border: "1px solid rgba(239, 68, 68, 0.28)",
                                     fontWeight: 700,
                                     fontSize: 11,
+                                    padding: "4px 9px",
+                                    borderRadius: 6,
                                   }}
                                 >
                                   <AlertTriangle size={12} style={{ flexShrink: 0 }} />
@@ -1961,11 +2047,14 @@ export default function TeamPerformancePage() {
                                     display: "inline-flex",
                                     alignItems: "center",
                                     gap: 5,
+                                    whiteSpace: "nowrap",
                                     background: "rgba(245, 158, 11, 0.15)",
                                     color: "var(--accent-amber)",
                                     border: "1px solid rgba(245, 158, 11, 0.3)",
                                     fontWeight: 700,
                                     fontSize: 11,
+                                    padding: "4px 9px",
+                                    borderRadius: 6,
                                   }}
                                 >
                                   <AlertCircle size={12} style={{ flexShrink: 0 }} />
@@ -1975,13 +2064,19 @@ export default function TeamPerformancePage() {
                             }
                             return (
                               <span
+                                className="badge"
                                 style={{
                                   display: "inline-flex",
                                   alignItems: "center",
                                   gap: 5,
-                                  fontSize: 12,
+                                  whiteSpace: "nowrap",
+                                  background: "rgba(255, 255, 255, 0.04)",
                                   color: "var(--text-secondary)",
+                                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                                  fontSize: 11,
                                   fontWeight: 500,
+                                  padding: "4px 9px",
+                                  borderRadius: 6,
                                 }}
                               >
                                 <Clock size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
@@ -1992,14 +2087,14 @@ export default function TeamPerformancePage() {
                         </td>
 
                         {/* Actions — Contextual & never empty */}
-                        <td style={{ textAlign: "right" }}>
+                        <td style={{ padding: "13px 16px", textAlign: "right", whiteSpace: "nowrap", verticalAlign: "middle" }}>
                           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
                             {isAdmin ? (
                               <>
-                                {t.status === "Under Review" ? (
+                                {isTaskUnderReview(t.status) ? (
                                   <button
                                     className="btn btn-primary"
-                                    style={{ padding: "4px 10px", fontSize: 11, background: "var(--accent-amber)", color: "#000", fontWeight: 700 }}
+                                    style={{ padding: "4px 10px", fontSize: 11, background: "var(--accent-amber)", color: "#000", fontWeight: 700, borderRadius: 6 }}
                                     onClick={() => {
                                       setReviewTask(t);
                                       setReviewActionType("approve");
@@ -2010,7 +2105,7 @@ export default function TeamPerformancePage() {
                                 ) : (
                                   <button
                                     className="btn btn-secondary"
-                                    style={{ padding: "4px 10px", fontSize: 11 }}
+                                    style={{ padding: "4px 10px", fontSize: 11, borderRadius: 6 }}
                                     onClick={() => {
                                       setReviewTask(t);
                                       setReviewActionType("override");
@@ -2026,7 +2121,7 @@ export default function TeamPerformancePage() {
                                 {isTaskAssignee && isTaskPending(t.status) && (
                                   <button
                                     className="btn btn-secondary"
-                                    style={{ padding: "4px 10px", fontSize: 11, color: "var(--accent-blue)", borderColor: "rgba(59, 130, 246, 0.4)" }}
+                                    style={{ padding: "4px 10px", fontSize: 11, color: "var(--accent-blue)", borderColor: "rgba(59, 130, 246, 0.4)", borderRadius: 6 }}
                                     onClick={() => handleStartTask(t)}
                                   >
                                     Start
@@ -2035,14 +2130,14 @@ export default function TeamPerformancePage() {
                                 {isTaskAssignee && isTaskInProgress(t.status) && (
                                   <button
                                     className="btn btn-primary"
-                                    style={{ padding: "4px 10px", fontSize: 11, background: "var(--accent-amber)", color: "#000", fontWeight: 700 }}
+                                    style={{ padding: "4px 10px", fontSize: 11, background: "var(--accent-amber)", color: "#000", fontWeight: 700, borderRadius: 6 }}
                                     onClick={() => setSubmitTaskTarget(t)}
                                   >
                                     Submit
                                   </button>
                                 )}
                                 {isTaskUnderReview(t.status) && (
-                                  <span className="badge" style={{ background: "rgba(245, 158, 11, 0.12)", color: "var(--accent-amber)", fontSize: 10.5 }}>
+                                  <span className="badge" style={{ background: "rgba(245, 158, 11, 0.12)", color: "var(--accent-amber)", fontSize: 10.5, padding: "3px 8px", borderRadius: 6 }}>
                                     In Review
                                   </span>
                                 )}
@@ -2050,7 +2145,7 @@ export default function TeamPerformancePage() {
                             )}
                             <button
                               className="btn btn-ghost"
-                              style={{ padding: "4px 7px" }}
+                              style={{ padding: "4px 7px", borderRadius: 6 }}
                               title="View Activity History"
                               onClick={() => setTimelineTask(t)}
                             >

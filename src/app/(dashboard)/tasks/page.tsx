@@ -1227,16 +1227,16 @@ export default function TasksPage() {
       {/* ── List View ── */}
       {!loading && viewMode === "list" && (
         <div className="table-container">
-          <table>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
             <thead>
               <tr>
-                <th>Task</th>
-                <th>Assignee</th>
-                <th>Priority</th>
-                <th>Start Date</th>
-                <th>Deadline</th>
-                <th>Status</th>
-                <th style={{ textAlign: "right" }}>Actions</th>
+                <th style={{ minWidth: 220 }}>Task</th>
+                <th style={{ minWidth: 150, whiteSpace: "nowrap" }}>Assignee</th>
+                <th style={{ minWidth: 90, textAlign: "center", whiteSpace: "nowrap" }}>Priority</th>
+                <th style={{ minWidth: 120, whiteSpace: "nowrap" }}>Start Date</th>
+                <th style={{ minWidth: 120, whiteSpace: "nowrap" }}>Deadline</th>
+                <th style={{ minWidth: 110, textAlign: "center", whiteSpace: "nowrap" }}>Status</th>
+                <th style={{ textAlign: "right", minWidth: 140, whiteSpace: "nowrap" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1250,16 +1250,16 @@ export default function TasksPage() {
                       <div style={{ fontWeight: 600, fontSize: 13 }}>{t.title}</div>
                       {t.desc && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{t.desc}</div>}
                     </td>
-                    <td style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t.assigneeName}</td>
-                    <td>
+                    <td style={{ fontSize: 13, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{t.assigneeName}</td>
+                    <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
                       <span className="badge" style={{ background: PRIORITY_BG[t.priority], color: PRIORITY_COLOR[t.priority] }}>
                         {t.priority}
                       </span>
                     </td>
-                    <td style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    <td style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                       {t.startDate ? formatDate(t.startDate) : "—"}
                     </td>
-                    <td style={{ fontSize: 12, color: overdue ? "var(--accent-red)" : "var(--text-muted)", fontWeight: overdue ? 700 : 500 }}>
+                    <td style={{ fontSize: 12, color: overdue ? "var(--accent-red)" : "var(--text-muted)", fontWeight: overdue ? 700 : 500, whiteSpace: "nowrap" }}>
                       {t.deadline ? formatDate(t.deadline) : "—"}
                     </td>
                     <td>
