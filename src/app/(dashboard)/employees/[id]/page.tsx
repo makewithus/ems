@@ -8,6 +8,7 @@ import {
   KeyRound, ClipboardList,
 } from "lucide-react";
 import { formatDate, getInitials, formatCurrency, EMPLOYMENT_TYPES, calculateProfileCompletion, computeHoursWorked, formatPayrollMonth } from "@/lib/utils";
+import { sanitizeAttendanceRecord } from "@/lib/attendanceService";
 import { useDepartments } from "@/hooks/useDepartments";
 import { db } from "@/lib/firebase";
 import {
@@ -468,7 +469,7 @@ function EmployeeAttendanceTab({ employeeId }: { employeeId: string }) {
       try {
         const q = query(collection(db, "attendance"), where("employeeId", "==", employeeId));
         const snap = await getDocs(q);
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const rows = snap.docs.map((d) => sanitizeAttendanceRecord({ id: d.id, ...d.data() }));
         rows.sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
         setRecords(rows);
       } catch {

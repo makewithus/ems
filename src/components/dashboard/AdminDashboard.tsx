@@ -15,7 +15,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuthStore } from "@/store/auth.store";
 import { toast } from "sonner";
-import { reconcileAttendanceForDate } from "@/lib/attendanceService";
+import { reconcileAttendanceForDate, sanitizeAttendanceRecord } from "@/lib/attendanceService";
 
 const PIE_COLORS = [
   "var(--text-primary)",
@@ -119,11 +119,11 @@ export default function AdminDashboard() {
     const todayDateStr = new Date().toISOString().split("T")[0];
     const q = query(collection(db, "attendance"), where("date", "==", todayDateStr));
     const unsub = onSnapshot(q, (snap) => {
-      const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const records = snap.docs.map((d) => sanitizeAttendanceRecord({ id: d.id, ...d.data() }));
       setTodayAttendance(records);
       let present = 0;
-      snap.docs.forEach((d) => {
-        const s = d.data().status ?? "";
+      records.forEach((d: any) => {
+        const s = d.status ?? "";
         if (s === "Present" || s === "Late") present++;
       });
       setPresentCount(present);
@@ -150,7 +150,7 @@ export default function AdminDashboard() {
 
     const q = query(collection(db, "attendance"), where("date", "in", weekDates));
     const unsub = onSnapshot(q, (snap) => {
-      const records = snap.docs.map((d) => d.data());
+      const records = snap.docs.map((d) => sanitizeAttendanceRecord({ id: d.id, ...d.data() }));
       const result = weekDates.map((dateStr, i) => {
         const recon = reconcileAttendanceForDate({
           employees: rawEmployees,

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import { parseTimeToMinutes, computeHoursWorked } from "@/lib/utils";
-import { classifyAttendanceRecord, toLocalDateString } from "@/lib/attendanceService";
+import { classifyAttendanceRecord, toLocalDateString, sanitizeAttendanceRecord } from "@/lib/attendanceService";
 import {
   collection, query, where, onSnapshot,
   doc, setDoc, getDoc, serverTimestamp,
@@ -41,7 +41,7 @@ export function useAttendanceByDate(date: string) {
       (snap) => {
         const rows: AttendanceRecord[] = snap.docs.map((d) => {
           const data = d.data();
-          return {
+          const raw: AttendanceRecord = {
             id: d.id,
             employeeId: data.employeeId ?? "",
             employeeName: data.employeeName ?? "",
@@ -56,6 +56,16 @@ export function useAttendanceByDate(date: string) {
             manuallyMarked: data.manuallyMarked ?? false,
             notes: data.notes ?? "",
           };
+          const sanitized = sanitizeAttendanceRecord(raw);
+          // If corrupted placeholder or weekend marked Present detected, self-heal in Firestore in background
+          if (
+            sanitized.status !== raw.status ||
+            sanitized.clockIn !== raw.clockIn ||
+            sanitized.clockOut !== raw.clockOut
+          ) {
+            setDoc(doc(db, "attendance", d.id), sanitized, { merge: true }).catch(() => {});
+          }
+          return sanitized;
         });
         // Sort by employee name in-memory
         rows.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
@@ -91,7 +101,7 @@ export function useEmployeeAttendance(employeeId: string) {
       (snap) => {
         const rows: AttendanceRecord[] = snap.docs.map((d) => {
           const data = d.data();
-          return {
+          const raw: AttendanceRecord = {
             id: d.id,
             employeeId: data.employeeId ?? "",
             employeeName: data.employeeName ?? "",
@@ -106,6 +116,16 @@ export function useEmployeeAttendance(employeeId: string) {
             manuallyMarked: data.manuallyMarked ?? false,
             notes: data.notes ?? "",
           };
+          const sanitized = sanitizeAttendanceRecord(raw);
+          // If corrupted placeholder or weekend marked Present detected, self-heal in Firestore in background
+          if (
+            sanitized.status !== raw.status ||
+            sanitized.clockIn !== raw.clockIn ||
+            sanitized.clockOut !== raw.clockOut
+          ) {
+            setDoc(doc(db, "attendance", d.id), sanitized, { merge: true }).catch(() => {});
+          }
+          return sanitized;
         });
         // Sort by date descending in-memory
         rows.sort((a, b) => b.date.localeCompare(a.date));

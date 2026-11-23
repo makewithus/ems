@@ -24,11 +24,13 @@ import AttendanceCalendarModal from "@/components/attendance/AttendanceCalendarM
 import ManualAttendancePanel from "@/components/attendance/ManualAttendancePanel";
 
 const statusBadge: Record<string, { bg: string; color: string }> = {
-  Present:    { bg: "var(--accent-green-dim)",  color: "var(--accent-green)" },
-  Absent:     { bg: "var(--accent-red-dim)",    color: "var(--accent-red)" },
-  Late:       { bg: "var(--accent-amber-dim)",  color: "var(--accent-amber)" },
-  "Half Day": { bg: "var(--accent-purple-dim)", color: "var(--accent-purple)" },
-  Holiday:    { bg: "var(--accent-blue-dim)",   color: "var(--accent-blue)" },
+  Present:      { bg: "var(--accent-green-dim)",  color: "var(--accent-green)" },
+  Absent:       { bg: "var(--accent-red-dim)",    color: "var(--accent-red)" },
+  Late:         { bg: "var(--accent-amber-dim)",  color: "var(--accent-amber)" },
+  "Half Day":   { bg: "var(--accent-purple-dim)", color: "var(--accent-purple)" },
+  Holiday:      { bg: "var(--accent-blue-dim)",   color: "var(--accent-blue)" },
+  Weekend:      { bg: "rgba(255,255,255,0.06)",   color: "var(--text-muted)" },
+  "Weekly Off": { bg: "rgba(255,255,255,0.06)",   color: "var(--text-muted)" },
 };
 
 

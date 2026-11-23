@@ -22,7 +22,13 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function getDayColor(status: string | undefined, isWeekend: boolean, isFuture: boolean) {
   if (isFuture) return { bg: "transparent", color: "var(--text-muted)", border: "1px solid transparent" };
-  if (isWeekend && !status) return { bg: "rgba(255,255,255,0.04)", color: "var(--text-muted)", border: "1px solid var(--border)" };
+  // Weekends must NEVER be colored green as Present
+  if (isWeekend) {
+    if (status === "Holiday") {
+      return { bg: "var(--accent-purple-dim)", color: "var(--accent-purple)", border: "1px solid rgba(168,85,247,0.3)" };
+    }
+    return { bg: "rgba(255,255,255,0.04)", color: "var(--text-muted)", border: "1px solid var(--border)" };
+  }
   if (!status) return { bg: "var(--accent-red-dim)", color: "var(--accent-red)", border: "1px solid rgba(239,68,68,0.3)" };
   switch (status) {
     case "Present":
@@ -34,6 +40,9 @@ function getDayColor(status: string | undefined, isWeekend: boolean, isFuture: b
       return { bg: "var(--accent-red-dim)", color: "var(--accent-red)", border: "1px solid rgba(239,68,68,0.3)" };
     case "Holiday":
       return { bg: "var(--accent-purple-dim)", color: "var(--accent-purple)", border: "1px solid rgba(168,85,247,0.3)" };
+    case "Weekend":
+    case "Weekly Off":
+      return { bg: "rgba(255,255,255,0.04)", color: "var(--text-muted)", border: "1px solid var(--border)" };
     default:
       return { bg: "rgba(255,255,255,0.04)", color: "var(--text-muted)", border: "1px solid var(--border)" };
   }
@@ -69,7 +78,12 @@ function CalendarGrid({ records, employeeName }: { records: AttendanceRecord[]; 
   while (cells.length % 7 !== 0) cells.push(null);
 
   const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const presentCount = records.filter(r => r.date.startsWith(monthPrefix) && (r.status === "Present" || r.status === "Late")).length;
+  const presentCount = records.filter(r => {
+    if (!r.date.startsWith(monthPrefix)) return false;
+    const d = new Date(r.date + "T00:00:00");
+    const isWk = d.getDay() === 0 || d.getDay() === 6;
+    return !isWk && (r.status === "Present" || r.status === "Late");
+  }).length;
   const absentCount  = records.filter(r => r.date.startsWith(monthPrefix) && r.status === "Absent").length;
   const halfCount    = records.filter(r => r.date.startsWith(monthPrefix) && r.status === "Half Day").length;
 
@@ -142,7 +156,11 @@ function CalendarGrid({ records, employeeName }: { records: AttendanceRecord[]; 
             return (
               <div
                 key={dateStr}
-                title={status ?? (isFuture ? "Future" : isWeekend ? "Weekend" : "No record — Absent")}
+                title={
+                  isFuture ? "Future" :
+                  isWeekend ? (status === "Holiday" ? "Holiday" : "Weekend") :
+                  (status ?? "No record — Absent")
+                }
                 style={{
                   aspectRatio: "1",
                   borderRadius: 8,
@@ -183,6 +201,7 @@ function CalendarGrid({ records, employeeName }: { records: AttendanceRecord[]; 
           { color: "var(--accent-red)",   label: "Absent" },
           { color: "var(--accent-amber)",  label: "Half Day" },
           { color: "var(--accent-purple)", label: "Holiday" },
+          { color: "rgba(255,255,255,0.2)", label: "Weekend" },
         ].map((l) => (
           <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--text-secondary)" }}>
             <div style={{ width: 10, height: 10, borderRadius: 2, background: l.color }} />

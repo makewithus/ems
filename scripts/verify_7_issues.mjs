@@ -290,14 +290,33 @@ const allExact1815 = weekdayRecs.every((r) => r.clockOut === "18:15");
 assert(!allExact0912, "Weekday clock-in timings are varied, not hardcoded 09:12");
 assert(!allExact1815, "Weekday clock-out timings are varied, not hardcoded 18:15");
 
-// Check 3: Sanitizer cleans up old repetitive records
-const badSample = [
-  { employeeId: "TEST", date: "2026-11-14", clockIn: "09:12", clockOut: "18:15", status: "Present", isSeedData: true },
-  { employeeId: "TEST", date: "2026-11-15", clockIn: "09:12", clockOut: "18:15", status: "Present", isSeedData: true },
+// Check 3: Sanitizer cleans up old repetitive records for ANY employee (E-08)
+const nov12to17Sample = [
+  { employeeId: "EMP1005", date: "2026-11-12", clockIn: "09:12 AM", clockOut: "06:15 PM", status: "Present" },
+  { employeeId: "EMP1005", date: "2026-11-13", clockIn: "09:12",    clockOut: "18:15",    status: "Present" },
+  { employeeId: "EMP1005", date: "2026-11-14", clockIn: "09:12 AM", clockOut: "06:15 PM", status: "Present" }, // Sat
+  { employeeId: "EMP1005", date: "2026-11-15", clockIn: "09:12",    clockOut: "18:15",    status: "Present" }, // Sun
+  { employeeId: "EMP1005", date: "2026-11-16", clockIn: "09:12 AM", clockOut: "06:15 PM", status: "Present" },
+  { employeeId: "EMP1005", date: "2026-11-17", clockIn: "09:12",    clockOut: "18:15",    status: "Present" },
 ];
-const sanitized = sanitizeAttendanceRecords(badSample);
-assert(sanitized[0].status === "Weekend", "Sanitizer converts weekend Present record to Weekend");
-assert(sanitized[1].status === "Weekend", "Sanitizer converts Sunday Present record to Weekend");
+const sanitizedNov = sanitizeAttendanceRecords(nov12to17Sample);
+
+// 14 & 15 Nov must be Weekend (NEVER Present)
+const satSan = sanitizedNov.find((r) => r.date === "2026-11-14");
+const sunSan = sanitizedNov.find((r) => r.date === "2026-11-15");
+assert(satSan.status === "Weekend", "Sat 14 Nov sanitized to Weekend");
+assert(satSan.clockIn === "" && satSan.clockOut === "", "Sat 14 Nov has empty punch timings");
+assert(sunSan.status === "Weekend", "Sun 15 Nov sanitized to Weekend");
+assert(sunSan.clockIn === "" && sunSan.clockOut === "", "Sun 15 Nov has empty punch timings");
+
+// 12, 13, 16, 17 Nov must NOT have identical 09:12 - 18:15
+const weekdaySan = sanitizedNov.filter((r) => r.date !== "2026-11-14" && r.date !== "2026-11-15");
+const allExact0912San = weekdaySan.every((r) => r.clockIn === "09:12" || r.clockIn === "09:12 AM");
+const allExact1815San = weekdaySan.every((r) => r.clockOut === "18:15" || r.clockOut === "06:15 PM");
+assert(!allExact0912San, "Weekday 12-17 Nov clock-in timings are varied, not identical 09:12");
+assert(!allExact1815San, "Weekday 12-17 Nov clock-out timings are varied, not identical 18:15");
+const uniqueIns = new Set(weekdaySan.map((r) => r.clockIn));
+assert(uniqueIns.size > 1, "Weekday 12-17 Nov clock-ins have authentic variation");
 
 
 // ─────────────────────────────────────────────────────────────────────────────

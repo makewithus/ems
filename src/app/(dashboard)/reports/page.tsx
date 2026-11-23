@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { useAuthStore } from "@/store/auth.store";
 import { formatPayrollMonth } from "@/lib/utils";
+import { sanitizeAttendanceRecord } from "@/lib/attendanceService";
 
 const REPORT_TYPES = [
   { id: "attendance", label: "Attendance Report",  icon: Calendar,   color: "var(--accent-blue)"   },
@@ -63,7 +64,7 @@ export default function ReportsPage() {
     const unsub = onSnapshot(q, (snap) => {
       const map: Record<string, { present: number; absent: number; late: number }> = {};
       snap.docs.forEach((d) => {
-        const data = d.data();
+        const data = sanitizeAttendanceRecord(d.data() as any);
         const date: string = data.date ?? "";
         if (!date) return;
         const key = new Date(date).toLocaleString("default", { month: "short", year: "2-digit" });
