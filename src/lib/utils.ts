@@ -270,16 +270,21 @@ export function computeHoursWorked(
   if (!clockIn || !clockOut) return "—";
   const inMins = parseTimeToMinutes(clockIn);
   const outMins = parseTimeToMinutes(clockOut);
-  if (inMins === null || outMins === null || outMins <= inMins) return "—";
+  if (inMins === null || outMins === null) return "—";
 
+  // Handle normal shifts, same-time clock-out, and overnight shifts
   let diff = outMins - inMins;
+  if (diff < 0) {
+    diff += 24 * 60; // 1440 minutes for overnight shift
+  }
 
   // Deduct break if recorded
   if (breakStart && breakEnd) {
     const bStart = parseTimeToMinutes(breakStart);
     const bEnd = parseTimeToMinutes(breakEnd);
-    if (bStart !== null && bEnd !== null && bEnd > bStart) {
-      const bDuration = bEnd - bStart;
+    if (bStart !== null && bEnd !== null) {
+      let bDuration = bEnd - bStart;
+      if (bDuration < 0) bDuration += 24 * 60;
       diff = Math.max(0, diff - bDuration);
     }
   }

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
 import { parseTimeToMinutes, computeHoursWorked } from "@/lib/utils";
+import { classifyAttendanceRecord, toLocalDateString } from "@/lib/attendanceService";
 import {
   collection, query, where, onSnapshot,
   doc, setDoc, getDoc, serverTimestamp,
@@ -133,7 +134,7 @@ export async function recordClockIn(
   uid?: string
 ) {
   const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
+  const dateStr = toLocalDateString(now);
   const timeStr = now.toTimeString().slice(0, 5);
   const docId = `${employeeId}_${dateStr}`;
 
@@ -182,7 +183,7 @@ export async function recordClockOut(
   clockInTime: string
 ) {
   const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
+  const dateStr = toLocalDateString(now);
   const timeStr = now.toTimeString().slice(0, 5);
   const docId = `${employeeId}_${dateStr}`;
 
@@ -212,9 +213,6 @@ export async function recordClockOut(
   if (inMins === null || outMins === null) {
     throw new Error("Invalid time format for clock-in or clock-out.");
   }
-  if (outMins < inMins) {
-    throw new Error("Clock-out time cannot be earlier than clock-in time.");
-  }
 
   // Auto-close break if employee is clocking out while still on break
   let effectiveBreakEnd = breakEnd;
@@ -222,38 +220,22 @@ export async function recordClockOut(
     effectiveBreakEnd = timeStr;
   }
 
-  // Compute hours worked with break deducted
-  const hoursWorked = computeHoursWorked(resolvedClockIn, timeStr, breakStart, effectiveBreakEnd);
-
-  // Calculate net worked minutes and transition status to completed state
-  let diff = outMins - inMins;
-  if (breakStart && effectiveBreakEnd) {
-    const bs = parseTimeToMinutes(breakStart);
-    const be = parseTimeToMinutes(effectiveBreakEnd);
-    if (bs !== null && be !== null && be > bs) {
-      diff = Math.max(0, diff - (be - bs));
-    }
-  }
-
-  let updatedStatus: AttendanceRecord["status"];
-  let notes = "";
-  if (diff < 240) {
-    updatedStatus = "Half Day";
-    notes = "Short day (< 4h worked)";
-  } else if (inMins <= 9 * 60 + 15) {
-    updatedStatus = "Present";
-  } else {
-    updatedStatus = "Late";
-  }
+  // NEW-02: Use centralized attendance classification service
+  const classification = classifyAttendanceRecord({
+    clockIn: resolvedClockIn,
+    clockOut: timeStr,
+    breakStart,
+    breakEnd: effectiveBreakEnd,
+  });
 
   await setDoc(
     doc(db, "attendance", docId),
     {
       clockOut: timeStr,
       ...(breakStart ? { breakEnd: effectiveBreakEnd } : {}),
-      hoursWorked,
-      status: updatedStatus,
-      ...(notes ? { notes } : {}),
+      hoursWorked: classification.hoursWorked,
+      status: classification.status,
+      ...(classification.notes ? { notes: classification.notes } : {}),
       updatedAt: serverTimestamp(),
     },
     { merge: true }
@@ -264,7 +246,7 @@ export async function recordClockOut(
 /** Record break start for an employee */
 export async function recordBreakStart(employeeId: string) {
   const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
+  const dateStr = toLocalDateString(now);
   const timeStr = now.toTimeString().slice(0, 5);
   const docId = `${employeeId}_${dateStr}`;
 
@@ -283,7 +265,7 @@ export async function recordBreakStart(employeeId: string) {
 /** Record break end for an employee */
 export async function recordBreakEnd(employeeId: string) {
   const now = new Date();
-  const dateStr = now.toISOString().split("T")[0];
+  const dateStr = toLocalDateString(now);
   const timeStr = now.toTimeString().slice(0, 5);
   const docId = `${employeeId}_${dateStr}`;
 

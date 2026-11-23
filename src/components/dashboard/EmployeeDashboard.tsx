@@ -11,6 +11,7 @@ import {
   collection, query, where, onSnapshot, orderBy, limit, doc,
 } from "firebase/firestore";
 import { formatCurrency, fmt24to12, parseTimeToMinutes } from "@/lib/utils";
+import { calculateLoginStreak, toLocalDateString } from "@/lib/attendanceService";
 
 const tooltipStyle = {
   backgroundColor: "var(--bg-tertiary)",
@@ -83,14 +84,14 @@ export default function EmployeeDashboard() {
   const { clockIn, clockOut, continueWork } = useAttendanceStore();
 
   const employeeId = profile?.employeeId ?? "";
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = toLocalDateString(new Date());
 
   // Calendar state
   const today = new Date();
   const [calendarYear, setCalendarYear] = useState(today.getFullYear());
   const [calendarMonth, setCalendarMonth] = useState(today.getMonth());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(
-    today.toISOString().split("T")[0]
+    toLocalDateString(today)
   );
 
   // Live attendance records
@@ -288,32 +289,9 @@ export default function EmployeeDashboard() {
     return () => unsub();
   }, [employeeId]);
 
-  // Compute login streak from attendance records
+  // Compute login streak using centralized attendance service (NEW-01)
   const loginStreak = useMemo(() => {
-    if (empRecords.length === 0) return 0;
-    let streak = 0;
-    const today = new Date();
-    for (let i = 0; i < 60; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
-      const rec = empRecords.find((r) => r.date === dateStr);
-      const day = d.getDay();
-      const isWeekend = day === 0 || day === 6;
-
-      if (rec && (rec.status === "Present" || rec.status === "Late")) {
-        streak++;
-      } else if (isWeekend) {
-        // Weekend without work: don't break streak if past days were present
-        continue;
-      } else if (i === 0 && !rec) {
-        // Today before clock-in: don't break streak for previous days
-        continue;
-      } else {
-        break;
-      }
-    }
-    return streak;
+    return calculateLoginStreak(empRecords);
   }, [empRecords]);
 
   // Last 7 days activity data (full week including weekends)
@@ -325,7 +303,7 @@ export default function EmployeeDashboard() {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const dow = d.getDay();
-      const dateStr = d.toISOString().split("T")[0];
+      const dateStr = toLocalDateString(d);
       const rec = empRecords.find((r) => r.date === dateStr);
       let hours = 0;
       if (rec) {

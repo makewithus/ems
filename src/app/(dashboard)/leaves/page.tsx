@@ -22,7 +22,7 @@ const schema = z.object({
   if (!d.startDate || !d.endDate) return true;
   return d.endDate >= d.startDate;
 }, {
-  message: "End date cannot be earlier than start date.",
+  message: "End date cannot be earlier than the start date.",
   path: ["endDate"],
 });
 type FormData = z.infer<typeof schema>;
@@ -134,9 +134,23 @@ export default function LeavesPage() {
 
 
   /* ── Submit leave (employee) — writes to Firestore ── */
+  const onInvalid = (fieldErrors: any) => {
+    if (fieldErrors.endDate) {
+      toast.error(fieldErrors.endDate.message || "End date cannot be earlier than the start date.");
+    } else if (fieldErrors.startDate) {
+      toast.error(fieldErrors.startDate.message || "Start date is required.");
+    } else if (fieldErrors.leaveType) {
+      toast.error(fieldErrors.leaveType.message || "Please select a leave type.");
+    } else if (fieldErrors.reason) {
+      toast.error(fieldErrors.reason.message || "Please provide a reason.");
+    } else {
+      toast.error("Please fill all required fields correctly.");
+    }
+  };
+
   const onSubmit = async (data: FormData) => {
     if (data.endDate < data.startDate) {
-      toast.error("End date cannot be earlier than start date.");
+      toast.error("End date cannot be earlier than the start date.");
       return;
     }
 
@@ -222,8 +236,12 @@ export default function LeavesPage() {
       toast.success("Leave request submitted successfully!");
       reset();
       setShowForm(false);
-    } catch {
-      toast.error("Failed to submit leave request. Please try again.");
+    } catch (err: any) {
+      console.error("Leave request submission error:", err);
+      const apiMessage = err?.message
+        ? `Failed to submit leave request: ${err.message}`
+        : "Failed to submit leave request. Please check permissions and try again.";
+      toast.error(apiMessage);
     }
   };
 
@@ -342,7 +360,7 @@ export default function LeavesPage() {
       {showForm && (
         <div className="card" style={{ padding: 24, marginBottom: 24, maxWidth: 560 }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 18 }}>New Leave Request</div>
-          <form onSubmit={handleSubmit(onSubmit)}>
+          <form onSubmit={handleSubmit(onSubmit, onInvalid)}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div style={{ gridColumn: "1/-1" }}>
                 <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Leave Type</label>
