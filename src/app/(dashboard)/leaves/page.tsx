@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { LEAVE_TYPES } from "@/lib/utils";
+import { toLocalDateString } from "@/lib/attendanceService";
 import { toast } from "sonner";
 import { db } from "@/lib/firebase";
 import {
@@ -18,12 +19,29 @@ const schema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate:   z.string().min(1, "End date is required"),
   reason:    z.string().min(1, "Please provide a reason"),
-}).refine((d) => {
-  if (!d.startDate || !d.endDate) return true;
-  return d.endDate >= d.startDate;
-}, {
-  message: "End date cannot be earlier than the start date.",
-  path: ["endDate"],
+}).superRefine((d, ctx) => {
+  const currentToday = toLocalDateString(new Date());
+  if (d.startDate && d.startDate < currentToday) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Start date cannot be in the past.",
+      path: ["startDate"],
+    });
+  }
+  if (d.endDate && d.endDate < currentToday) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End date cannot be in the past.",
+      path: ["endDate"],
+    });
+  }
+  if (d.startDate && d.endDate && d.endDate < d.startDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End date cannot be earlier than the start date.",
+      path: ["endDate"],
+    });
+  }
 });
 type FormData = z.infer<typeof schema>;
 
@@ -67,8 +85,11 @@ export default function LeavesPage() {
   const [requests, setRequests] = useState<LeaveRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } =
-    useForm<FormData>({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } =
+    useForm<FormData>({ resolver: zodResolver(schema), mode: "onChange" });
+
+  const watchStartDate = watch("startDate");
+  const todayStr = toLocalDateString(new Date());
 
   /* ── Real-time listener on leaveRequests collection ── */
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,6 +170,15 @@ export default function LeavesPage() {
   };
 
   const onSubmit = async (data: FormData) => {
+    const currentToday = toLocalDateString(new Date());
+    if (data.startDate < currentToday) {
+      toast.error("Start date cannot be in the past.");
+      return;
+    }
+    if (data.endDate < currentToday) {
+      toast.error("End date cannot be in the past.");
+      return;
+    }
     if (data.endDate < data.startDate) {
       toast.error("End date cannot be earlier than the start date.");
       return;
@@ -177,6 +207,7 @@ export default function LeavesPage() {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
     try {
+      // 1. Authoritative primary write (ultra-fast, non-blocking)
       await addDoc(collection(db, "leaveRequests"), {
         employeeId:   empId,
         employeeName: profile?.displayName ?? "Employee",
@@ -190,52 +221,56 @@ export default function LeavesPage() {
         updatedAt:    serverTimestamp(),
       });
 
-      // Dispatch notification to admins (fixes A-39)
-      try {
-        const { getDocs } = await import("firebase/firestore");
-        const adminSnap = await getDocs(
-          query(collection(db, "users"), where("role", "in", ["super_admin", "hr_admin"]))
-        );
-        const adminUids = adminSnap.docs.map((d) => d.id);
-        if (adminUids.length === 0) adminUids.push("admin");
-        
-        await Promise.allSettled(
-          adminUids.map((adId) =>
-            addDoc(collection(db, "notifications"), {
-              companyId: profile?.companyId ?? "default",
-              userId: adId,
-              senderUid: user?.uid ?? profile?.uid,
-              createdBy: user?.uid ?? profile?.uid,
-              targetRole: "admin",
-              title: "New Leave Request Submitted",
-              message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
-              type: "leave",
-              isRead: false,
-              link: "/leaves",
-              createdAt: serverTimestamp(),
-            })
-          )
-        );
-      } catch {
-        // Fallback to broadcast admin notification
-        await addDoc(collection(db, "notifications"), {
-          companyId: profile?.companyId ?? "default",
-          userId: "admin",
-          senderUid: user?.uid ?? profile?.uid,
-          createdBy: user?.uid ?? profile?.uid,
-          targetRole: "admin",
-          title: "New Leave Request Submitted",
-          message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
-          type: "leave",
-          isRead: false,
-          link: "/leaves",
-          createdAt: serverTimestamp(),
-        }).catch(() => {});
-      }
-
+      // Immediate UI feedback — instantaneous response!
       toast.success("Leave request submitted successfully!");
       reset();
       setShowForm(false);
+
+      // 2. Dispatch admin notifications asynchronously in the background
+      (async () => {
+        try {
+          const { getDocs } = await import("firebase/firestore");
+          const adminSnap = await getDocs(
+            query(collection(db, "users"), where("role", "in", ["super_admin", "hr_admin"]))
+          );
+          const adminUids = adminSnap.docs.map((d) => d.id);
+          if (adminUids.length === 0) adminUids.push("admin");
+
+          await Promise.allSettled(
+            adminUids.map((adId) =>
+              addDoc(collection(db, "notifications"), {
+                companyId: profile?.companyId ?? "default",
+                userId: adId,
+                senderUid: user?.uid ?? profile?.uid,
+                createdBy: user?.uid ?? profile?.uid,
+                targetRole: "admin",
+                title: "New Leave Request Submitted",
+                message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
+                type: "leave",
+                isRead: false,
+                link: "/leaves",
+                createdAt: serverTimestamp(),
+              })
+            )
+          );
+        } catch {
+          // Fallback to broadcast admin notification
+          await addDoc(collection(db, "notifications"), {
+            companyId: profile?.companyId ?? "default",
+            userId: "admin",
+            senderUid: user?.uid ?? profile?.uid,
+            createdBy: user?.uid ?? profile?.uid,
+            targetRole: "admin",
+            title: "New Leave Request Submitted",
+            message: `${profile?.displayName ?? "Employee"} submitted a ${data.leaveType} leave request for ${diffDays} day(s) (${data.startDate} to ${data.endDate})`,
+            type: "leave",
+            isRead: false,
+            link: "/leaves",
+            createdAt: serverTimestamp(),
+          }).catch(() => {});
+        }
+      })().catch((err) => console.warn("Background notification dispatch:", err));
+
     } catch (err: any) {
       console.error("Leave request submission error:", err);
       const apiMessage = err?.message
@@ -372,12 +407,24 @@ export default function LeavesPage() {
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Start Date</label>
-                <input id="leave-start" type="date" className="input-base" {...register("startDate")} />
+                <input
+                  id="leave-start"
+                  type="date"
+                  min={todayStr}
+                  className="input-base"
+                  {...register("startDate")}
+                />
                 {errors.startDate && <p id="leave-start-error" style={{ fontSize: 12, color: "var(--accent-red)", marginTop: 4 }}>{errors.startDate.message}</p>}
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>End Date</label>
-                <input id="leave-end" type="date" className="input-base" {...register("endDate")} />
+                <input
+                  id="leave-end"
+                  type="date"
+                  min={watchStartDate && watchStartDate >= todayStr ? watchStartDate : todayStr}
+                  className="input-base"
+                  {...register("endDate")}
+                />
                 {errors.endDate && <p id="leave-end-error" style={{ fontSize: 12, color: "var(--accent-red)", marginTop: 4 }}>{errors.endDate.message}</p>}
               </div>
               <div style={{ gridColumn: "1/-1" }}>

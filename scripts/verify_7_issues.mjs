@@ -151,12 +151,29 @@ const leaveSchema = z.object({
   startDate: z.string().min(1, "Start date is required"),
   endDate:   z.string().min(1, "End date is required"),
   reason:    z.string().min(1, "Please provide a reason"),
-}).refine((d) => {
-  if (!d.startDate || !d.endDate) return true;
-  return d.endDate >= d.startDate;
-}, {
-  message: "End date cannot be earlier than the start date.",
-  path: ["endDate"],
+}).superRefine((d, ctx) => {
+  const currentToday = toLocalDateString(new Date());
+  if (d.startDate && d.startDate < currentToday) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Start date cannot be in the past.",
+      path: ["startDate"],
+    });
+  }
+  if (d.endDate && d.endDate < currentToday) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End date cannot be in the past.",
+      path: ["endDate"],
+    });
+  }
+  if (d.startDate && d.endDate && d.endDate < d.startDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "End date cannot be earlier than the start date.",
+      path: ["endDate"],
+    });
+  }
 });
 
 // Test 1: Start 20 Dec, End 18 Dec -> Reject with clear message
@@ -209,6 +226,23 @@ const resMissingEnd = leaveSchema.safeParse({
   reason:    "Doctor appointment",
 });
 assert(!resMissingEnd.success, "Missing end date: Rejected");
+
+// Test 6: Past date (yesterday) cannot be chosen -> Reject
+const resPastDate = leaveSchema.safeParse({
+  leaveType: "Sick",
+  startDate: "2026-11-20",
+  endDate:   "2026-11-25",
+  reason:    "Medical",
+});
+assert(!resPastDate.success, "Past start date (2026-11-20): Rejected ('Start date cannot be in the past.')");
+
+const resPastEnd = leaveSchema.safeParse({
+  leaveType: "Sick",
+  startDate: "2026-11-24",
+  endDate:   "2026-11-20",
+  reason:    "Medical",
+});
+assert(!resPastEnd.success, "Past end date (2026-11-20): Rejected ('End date cannot be in the past.')");
 
 // Test 6: Overlap detection logic in leaves page
 const existingLeaves = [

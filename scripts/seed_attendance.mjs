@@ -159,3 +159,4 @@ export async function runAttendanceSeeder() {
 if (process.argv[1]?.endsWith("seed_attendance.mjs")) {
   runAttendanceSeeder().catch(console.error);
 }
+
